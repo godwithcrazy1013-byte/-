@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策定九州・隊伍傷害試算器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>策定九州・隊伍傷害試算器</h1>
+  <div class="global">
+    <label>敵方智力最低武將智力（諸葛亮用）
+      <input id="enemyInt" type="number" value="100" step="1">
+    </label>
+    <label>目標數修正
+      <input id="targetCorr" type="number" value="1" step="0.1" min="0">
+    </label>
+    <span class="hint">%一律填小數（0.1＝10%）｜口徑：命中數/疊層按最大</span>
+  </div>
+  <div id="presets" class="presets"></div>
+</header>
+
+<main>
+  <section id="team" class="team"></section>
+
+  <section class="summary">
+    <h2>隊伍合計</h2>
+    <div id="summaryCards" class="cards"></div>
+    <div id="memberTable"></div>
+  </section>
+
+  <section class="timeline-wrap">
+    <h2>每3秒行動時間軸（前90秒・主將→副將→副將，每9秒一輪）</h2>
+    <table id="timeline" class="timeline"></table>
+  </section>
+</main>
+
+<footer>
+  <p>模型口徑與 Excel「試算器＋行動時間軸」v3 完全一致（公式引擎交叉驗證通過）。普攻係數未公開故不演算；防禦類星石/特性只顯示不進輸出公式。</p>
+</footer>
+
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

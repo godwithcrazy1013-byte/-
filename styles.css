@@ -1,0 +1,165 @@
+/* 策定九州・隊伍傷害試算器 樣式（深色三國風：玄黑底、燙金點綴、丹紅行動列） */
+:root {
+  --bg: #14100c;
+  --panel: #1e1812;
+  --panel2: #261e15;
+  --line: #3d3122;
+  --gold: #d8a94e;
+  --gold-dim: #9a7a3a;
+  --red: #b03a2e;
+  --red-dim: #7e2b23;
+  --txt: #e8ddc8;
+  --dim: #9c8f76;
+  --green: #7fb069;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+header {
+  padding: 18px 24px 12px;
+  border-bottom: 2px solid var(--gold-dim);
+  background: linear-gradient(180deg, #221a10 0%, var(--bg) 100%);
+}
+header h1 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  color: var(--gold);
+  letter-spacing: 2px;
+}
+
+.global { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.global label { color: var(--dim); font-size: 12px; }
+.global input {
+  width: 80px;
+  margin-left: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--txt);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.hint { color: var(--dim); font-size: 12px; }
+
+.presets { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.preset {
+  background: var(--panel2);
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.preset:hover { background: #33281a; }
+.preset.clear { color: var(--dim); border-color: var(--line); }
+
+main { padding: 18px 24px 40px; max-width: 1500px; margin: 0 auto; }
+
+/* 三位武將卡片 */
+.team { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 14px;
+}
+.pos-tag {
+  position: absolute; top: 0; right: 12px;
+  background: var(--gold-dim); color: #14100c;
+  font-size: 12px; font-weight: bold;
+  padding: 2px 10px; border-radius: 0 0 6px 6px;
+}
+.portrait {
+  width: 96px; height: 96px;
+  margin: 4px auto 10px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-dim);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel2);
+  font-size: 34px; color: var(--gold-dim);
+}
+.portrait img { width: 100%; height: 100%; object-fit: cover; }
+
+.row { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.row label { color: var(--dim); font-size: 12px; min-width: 32px; }
+.row select, .row input {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--txt);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.row select { flex: 1; min-width: 90px; }
+.row input { width: 90px; }
+.row.triple label { min-width: auto; }
+.row.triple select { flex: 0 1 auto; min-width: 60px; }
+
+.stone { border: 1px dashed var(--line); border-radius: 6px; padding: 8px; margin: 8px 0; }
+.stone-title { color: var(--gold-dim); font-size: 12px; margin-bottom: 4px; }
+
+.stats {
+  margin-top: 10px; padding: 8px 10px;
+  background: var(--panel2); border-radius: 6px;
+  font-size: 13px;
+}
+.stats b { color: var(--gold); }
+.dim { color: var(--dim); }
+
+/* 合計 */
+.summary h2, .timeline-wrap h2 { color: var(--gold); font-size: 16px; margin: 20px 0 10px; letter-spacing: 1px; }
+.cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.sum-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 18px; min-width: 120px; text-align: center;
+}
+.sum-card.fac { border-color: var(--gold-dim); }
+.sum-k { color: var(--dim); font-size: 12px; }
+.sum-v { color: var(--gold); font-size: 20px; font-weight: bold; }
+.sum-card.fac .sum-v { font-size: 14px; color: var(--txt); }
+
+table.member, table.timeline {
+  width: 100%; border-collapse: collapse; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+}
+table.member th, table.member td,
+table.timeline th, table.timeline td {
+  border-bottom: 1px solid var(--line);
+  padding: 5px 8px; text-align: left; font-size: 12px;
+}
+table.member th, table.timeline th {
+  background: var(--panel2); color: var(--gold);
+  position: sticky; top: 0;
+}
+table.member td { font-size: 13px; }
+
+/* 時間軸 */
+.timeline-wrap { overflow-x: auto; }
+tr.round-start td { border-top: 2px solid var(--gold-dim); }
+td.actor { white-space: nowrap; font-weight: bold; color: var(--gold); }
+td.actor img {
+  width: 22px; height: 22px; border-radius: 50%;
+  vertical-align: -6px; margin-right: 5px;
+  border: 1px solid var(--gold-dim); object-fit: cover;
+}
+td.skill { color: var(--dim); }
+td.dmg { color: #f0c05a; font-weight: bold; }
+td.heal { color: var(--green); }
+td.fx { color: var(--dim); font-size: 11px; max-width: 260px; }
+
+footer {
+  padding: 14px 24px 30px; color: var(--dim); font-size: 12px;
+  border-top: 1px solid var(--line);
+}
