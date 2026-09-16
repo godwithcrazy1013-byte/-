@@ -244,7 +244,7 @@ function renderSummary(r, team) {
     ['30秒', r.cum30],
     ['60秒', r.cum60],
     ['90秒技', r.cum90],
-    ['90秒普', Math.round(r.na90)],
+    ['90秒普(含追擊)', Math.round(r.na90)],
     ['90秒合計', Math.round(r.total90)],
     ['90秒治', r.heal90],
   ].forEach(([k, v]) => {
@@ -257,6 +257,18 @@ function renderSummary(r, team) {
   badge.appendChild(el('div', 'sum-k', '陣營加成'));
   badge.appendChild(el('div', 'sum-v', facTxt));
   c.appendChild(badge);
+
+  // v4.3：隊伍含追擊武將時顯示各將追擊率與普攻乘數
+  const chasers = r.slots.filter((s) => s.chaseMult > 1);
+  if (chasers.length) {
+    const ch = el('div', 'sum-card fac');
+    ch.appendChild(el('div', 'sum-k', '追擊'));
+    ch.appendChild(el('div', 'sum-v', chasers.map((s) =>
+      s.name + ' 追擊' + Math.round(s.chase.rate * 1000) / 10 + '%'
+      + (s.chase.chain > 1 ? '×連鎖' + s.chase.chain : '')
+      + '（普攻×' + s.chaseMult.toFixed(2) + '）').join('；')));
+    c.appendChild(ch);
+  }
 
   // 成員表（折疊區內）
   const mt = document.getElementById('memberTable');
@@ -328,13 +340,16 @@ function renderBattleResult(br, foeLabel) {
   box.appendChild(banner);
 
   const grid = el('div', 'cards');
-  [
+  const statCards = [
     ['用時', br.time + ' 秒'],
     ['我方剩餘兵力', br.troopsA],
     ['敵方剩餘兵力', br.troopsB + '（' + foeLabel + ' ' + battleSel.adv + '階）'],
     ['我方滿兵普攻/擊', br.naA + '×3'],
     ['敵方滿兵普攻/擊', br.naB + '×3'],
-  ].forEach(([k, v]) => {
+  ];
+  if (br.counterA > 0) statCards.push(['我方反擊傷害', br.counterA]);   // v4.3
+  if (br.counterB > 0) statCards.push(['敵方反擊傷害', br.counterB]);
+  statCards.forEach(([k, v]) => {
     const d = el('div', 'sum-card');
     d.appendChild(el('div', 'sum-k', k));
     d.appendChild(el('div', 'sum-v', String(v)));

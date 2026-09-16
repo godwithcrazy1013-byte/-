@@ -1,4 +1,13 @@
-// 策定九州傷害模型 v4.2（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// 策定九州傷害模型 v4.3（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// v4.1：兵種系數鎖死（盾1/騎4/弓6，雙戰報校準）；新增簡易對打引擎 battle()
+// v4.2：進階效果正式接入——倒戈(ls)/移速差普攻(spdPa)/移速差sm(spdSm)，含敵方移速 opts.enemySpd
+// v4.3：追擊/反擊 v1——data.json skills 的 chase/counter 結構欄位正式入公式
+//       追擊：額外普攻期望=rate×chainFactor（chainFactor=Σ rate^(k-1) 幾何和），普攻乘數=1+rate×chainFactor
+//       反擊：僅 battle() 實作（compute() 無敵方資料，僅回傳 slot.counter 供顯示）；
+//             每 tick 敵方三將各普攻一次(=受普攻3次)，tick=3秒 → 每 tick 反擊次數=min(3, cap×3)
+//             遠程普攻 trigger v1 視同普攻；樂進「每100移速差+1%反擊機率」未實作（TODO）
+//       校準：COUNTER_K=2.0 保守值（張角實測5.6/次係數1.8-2.6、樂進5.7/次係數2.8，反推K≈2.0-2.5）；
+//             基礎機率未含「受武力/智力影響」加成（實測趙雲追擊37-39% vs 基礎15%），待校
 // v4.1：兵種系數鎖死（盾1/騎4/弓6，雙戰報校準）；新增簡易對打引擎 battle()
 // v4.2：進階效果正式接入——倒戈(ls)/移速差普攻(spdPa)/移速差sm(spdSm)，含敵方移速 opts.enemySpd
 (function (root, factory) {
@@ -10,6 +19,7 @@
   const affMul = (a) => (a === 'S' ? 1.2 : a === 'A' ? 1 : a === 'B' ? 0.8 : 0.7);
   const ZERO_ADV = { base: 0, sm: 0, team: 0, lead: 0, intl: 0, wul: 0, pa: 0, xprob: 0, vp: 0, tgt: 0, pts: 0, ls: 0, spdPa: 0, spdSm: 0 };
   const NA_K = 5.37;                    // 普攻校準K（5階盾滿兵每擊，2026-09-08戰報）
+  const COUNTER_K = 2.0;                // v4.3 反擊校準K：每跳傷害=係數×K（張角實測5.6/次、樂進5.7/次 → K≈2.0-2.5，取2.0保守）
   const TROOP_FAC = { '盾兵': 1, '騎兵': 4, '弓兵': 6 }; // 兵種系數（鎖死：盾5.3/騎≈20/弓≈31-37 每擊校準）
   const MAX_TROOPS = 24000;             // 雙方兵力（8000×3）
 
@@ -34,6 +44,43 @@
     return (DATA.adv && DATA.adv[name] && DATA.adv[name][adv | 0]) || ZERO_ADV;
   }
 
+  // v4.3：從 DATA.skills[name] 彙總追擊/反擊結構（chase/counter 欄位由匯出管線從技能描述解析）
+  // 追擊：rate 為各 entry 機率加總（專武裝備加成計入），chain 取最大；
+  //       額外普攻期望 = rate×chainFactor，chainFactor=Σ_{k=1..chain} rate^(k-1)（chain>1 遞減近似）
+  function chaseOf(name) {
+    const entries = (DATA.skills && DATA.skills[name]) || [];
+    let rate = 0, chain = 1;
+    for (const e of entries) {
+      if (!e.chase) continue;
+      rate += num(e.chase.rate);
+      if (e.chase.chain && e.chase.chain > chain) chain = e.chase.chain | 0;
+    }
+    if (rate <= 0) return null;
+    let cf = 0;
+    for (let k = 0; k < chain; k++) cf += Math.pow(rate, k);
+    return { rate, chain, chainFactor: cf, mult: 1 + rate * cf };
+  }
+  // 反擊：rate 加總、coef 取最高、cap 取最小（v1 近似）；遠程普攻 trigger v1 視同普攻（模型不區分遠近）
+  function counterOf(name) {
+    const entries = (DATA.skills && DATA.skills[name]) || [];
+    let rate = 0, coef = 0, cap = 999, ranged = false, has = false;
+    for (const e of entries) {
+      if (!e.counter) continue;
+      has = true;
+      rate += num(e.counter.rate);
+      if (num(e.counter.coef) > coef) coef = num(e.counter.coef);
+      if (num(e.counter.cap) > 0 && num(e.counter.cap) < cap) cap = num(e.counter.cap);
+      if (e.counter.trigger === '遠程普攻') ranged = true;
+    }
+    if (!has) return null;
+    return { rate, coef, cap, trigger: ranged ? '遠程普攻(v1視同普攻)' : '普攻' };
+  }
+  // 每 tick 反擊期望傷害：敵方三將各普攻一次(受普攻3次)；cap 為每秒上限、tick=3秒 → 次數=min(3, cap×3)
+  function counterTick(slot, ratio) {
+    if (!slot.counter) return 0;
+    return Math.min(3, slot.counter.cap * 3) * slot.counter.rate * slot.counter.coef * COUNTER_K * ratio;
+  }
+
   function buildSlots(team, opts) {
     opts = opts || {};
     const atkP = opts.atkP !== undefined ? num(opts.atkP) : 1.305;
@@ -51,8 +98,10 @@
       const alloc = s.alloc === '自動' || !s.alloc ? autoAttr : s.alloc;
       const pts = av.pts;
       const spdSmEff = av.spdSm * spdDiff;            // v4.2：移速差→技能傷害
+      const chase = chaseOf(s.name);                  // v4.3：追擊（額外普攻期望）
       return Object.assign({}, s, {
         c, fac: a.fac, mul, aff: a[s.troop], av, alloc, spdSmEff,
+        chase, chaseMult: chase ? chase.mult : 1, counter: counterOf(s.name),
         wu: round1(at.wu * mul + add('武力') + (alloc === '武力' ? pts : 0)),
         zhi: round1(at.zhi * mul + add('智力') + (alloc === '智力' ? pts : 0)),
         defP: num(s.s1.defP) + num(s.s2.defP),
@@ -142,7 +191,8 @@
       const s = slots[tk.m];
       const myBuffs = null; // 顯示用資料由 app 組（保持 compute 回傳精簡）
       cumD += tk.dmg; cumH += tk.heal;
-      const naTick = Math.round((slots[0].na + slots[1].na + slots[2].na) * ratio * 10) / 10;
+      // v4.3：普攻含追擊期望（各將 na × 自身 chaseMult 後加總）
+      const naTick = Math.round((slots[0].na * slots[0].chaseMult + slots[1].na * slots[1].chaseMult + slots[2].na * slots[2].chaseMult) * ratio * 10) / 10;
       cumNA = Math.round((cumNA + naTick) * 10) / 10;
       return Object.assign({}, tk, {
         actor: s.name, skill: s.c.skill, vuln: 0, buff: 0, na: naTick, cumD, cumH, cumNA, myBuffs, enemyFx: null, apply: s.c.vfx,
@@ -203,10 +253,10 @@
     const coreB = teamCore(B, enemyInt, targetCorr, tgtPer, Math.max(0, speedB - speedA));
 
     let troopsA = MAX_TROOPS, troopsB = MAX_TROOPS;
-    const outA = [0, 0, 0], outB = [0, 0, 0];   // 各武將累計輸出（技能+普攻）
-    const naSumA = A.reduce((p, s) => p + s.na, 0);
-    const naSumB = B.reduce((p, s) => p + s.na, 0);
-    let winner = 'draw', ticksUsed = 30;
+    const outA = [0, 0, 0], outB = [0, 0, 0];   // 各武將累計輸出（技能+普攻+反擊）
+    const naSumA = A.reduce((p, s) => p + s.na * s.chaseMult, 0);   // v4.3：普攻含追擊期望
+    const naSumB = B.reduce((p, s) => p + s.na * s.chaseMult, 0);
+    let winner = 'draw', ticksUsed = 30, counterA = 0, counterB = 0;   // v4.3：反擊累計
     const log = [];
 
     for (let i = 0; i < 30; i++) {
@@ -220,16 +270,25 @@
       const skillB = coreB.ticks[i].dmg;
       const naB = naSumB * ratioB;
       const dB = Math.round((skillB + naB) * 10) / 10;
+      // v4.3 反擊：受敵方三將普攻觸發，依我方剩餘兵力衰減；傷害打回敵方
+      const cntA = A.map((s) => counterTick(s, ratioA));
+      const cntB = B.map((s) => counterTick(s, ratioB));
+      const cntSumA = cntA.reduce((p, v) => p + v, 0);
+      const cntSumB = cntB.reduce((p, v) => p + v, 0);
 
-      troopsB = Math.max(0, Math.round((troopsB - dA) * 10) / 10);
-      troopsA = Math.max(0, Math.round((troopsA - dB) * 10) / 10);
+      troopsB = Math.max(0, Math.round((troopsB - dA - cntSumA) * 10) / 10);
+      troopsA = Math.max(0, Math.round((troopsA - dB - cntSumB) * 10) / 10);
       // 治療（各回各的、上限初始兵力）
       troopsA = Math.min(MAX_TROOPS, Math.round((troopsA + coreA.ticks[i].heal) * 10) / 10);
       troopsB = Math.min(MAX_TROOPS, Math.round((troopsB + coreB.ticks[i].heal) * 10) / 10);
 
       outA[coreA.ticks[i].m] += dA;
       outB[coreB.ticks[i].m] += dB;
-      log.push({ t: coreA.ticks[i].t, dA: Math.round(dA), dB: Math.round(dB), troopsA: Math.round(troopsA), troopsB: Math.round(troopsB) });
+      for (let j = 0; j < 3; j++) { outA[j] += cntA[j]; outB[j] += cntB[j]; }
+      counterA += cntSumA; counterB += cntSumB;
+      log.push({ t: coreA.ticks[i].t, dA: Math.round(dA), dB: Math.round(dB),
+        cA: Math.round(cntSumA), cB: Math.round(cntSumB),
+        troopsA: Math.round(troopsA), troopsB: Math.round(troopsB) });
 
       if (troopsA <= 0 || troopsB <= 0) {
         ticksUsed = i + 1;
@@ -244,11 +303,12 @@
       winner, ticksUsed, time: ticksUsed * 3,
       troopsA: Math.round(troopsA), troopsB: Math.round(troopsB),
       outA: outA.map((v) => Math.round(v)), outB: outB.map((v) => Math.round(v)),
+      counterA: Math.round(counterA), counterB: Math.round(counterB),   // v4.3
       namesA: A.map((s) => s.name), namesB: B.map((s) => s.name),
       naA: Math.round(naSumA * 10) / 10, naB: Math.round(naSumB * 10) / 10,
       log,
     };
   }
 
-  return { compute, battle, defaultSlot, num, speedOf, NA_K, TROOP_FAC, MAX_TROOPS };
+  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS };
 });
