@@ -187,6 +187,33 @@ table.battle-table { max-width: 520px; margin-bottom: 12px; }
 tr.foe-row td { color: var(--dim); }
 .battle-log .logline { font-size: 11px; color: var(--dim); line-height: 1.8; word-break: break-all; }
 
+/* ===== v4.4 對打兵力曲線圖（純 SVG） ===== */
+.battle-chart-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  max-width: 720px;
+}
+.battle-chart { width: 100%; height: auto; display: block; }
+.battle-chart .bt-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.battle-chart .bt-ax { fill: var(--dim); font-size: 11px; }
+.bt-legend { color: var(--dim); font-size: 12px; margin-top: 8px; }
+.bt-legend .bt-i {
+  display: inline-block; width: 14px; height: 4px; border-radius: 2px;
+  vertical-align: middle; margin: 0 4px 0 10px;
+}
+.bt-legend .bt-i:first-child { margin-left: 0; }
+.bt-legend .bt-i-a { height: 8px; border-radius: 2px; }
+/* 逐 tick 結算表 */
+table.bt-log { max-width: none; min-width: 640px; font-size: 12px; }
+table.bt-log th, table.bt-log td { text-align: right; padding: 3px 8px; }
+table.bt-log th:nth-child(-n+1), table.bt-log td:first-child { text-align: center; }
+.bt-def-a { color: #7ea6e8; }
+.bt-def-b { color: #e08a80; }
+.bt-loss { color: var(--gold); }
+
 /* ===== v4.2 分頁導覽 ===== */
 nav.tabs {
   display: flex; gap: 2px;

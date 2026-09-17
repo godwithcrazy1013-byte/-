@@ -329,6 +329,87 @@ function renderBattleControls() {
   ctl.appendChild(sel(ADVS, String(battleSel.adv), (e) => { battleSel.adv = parseInt(e.target.value, 10) || 0; refresh(); }));
 }
 
+// v4.4 雙方兵力曲線圖（純 SVG，無套件）：A 藍 / B 紅，淡色階梯背景=該側當下防禦%
+function battleChartSVG(log) {
+  const W = 680, H = 250, PL = 50, PR = 14, PT = 16, PB = 28;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = log.length;
+  if (!n) return '';
+  const maxT = log[n - 1].t || 90;
+  const maxDef = Math.max(100, Math.max.apply(null, log.map((l) => Math.max(l.defA, l.defB))));
+  const x = (t) => Math.round((PL + (t / maxT) * iw) * 10) / 10;
+  const y = (v) => Math.round((PT + (1 - v / MODEL.MAX_TROOPS) * ih) * 10) / 10;
+  const yDef = (d) => Math.round((PT + ih - (d / maxDef) * ih) * 10) / 10;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('class', 'battle-chart');
+  const add = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    Object.keys(attrs).forEach((k) => e.setAttribute(k, attrs[k]));
+    svg.appendChild(e);
+    return e;
+  };
+  const txt = (cx, cy, s, anchor, cls) => {
+    const e = add('text', { x: cx, y: cy, 'text-anchor': anchor || 'middle', 'class': cls || 'bt-ax' });
+    e.textContent = s;
+    return e;
+  };
+  // 防禦% 淡色階梯背景（值套用區間 t-3 ~ t）
+  const defArea = (key, color) => {
+    let d = 'M' + x(0) + ',' + yDef(log[0][key]);
+    log.forEach((l) => { d += ' L' + Math.max(x(0), x(l.t - 3)) + ',' + yDef(l[key]) + ' L' + x(l.t) + ',' + yDef(l[key]); });
+    d += ' L' + x(maxT) + ',' + (PT + ih) + ' L' + x(0) + ',' + (PT + ih) + ' Z';
+    add('path', { d, fill: color, stroke: 'none' });
+  };
+  defArea('defA', 'rgba(90,140,220,0.12)');
+  defArea('defB', 'rgba(220,90,80,0.12)');
+  // 格線與軸標
+  [0, MODEL.MAX_TROOPS / 2, MODEL.MAX_TROOPS].forEach((v) => {
+    add('line', { x1: PL, y1: y(v), x2: W - PR, y2: y(v), 'class': 'bt-grid' });
+    txt(PL - 6, y(v) + 4, String(Math.round(v)), 'end');
+  });
+  [0, 30, 60, 90].forEach((t) => {
+    if (t > maxT) return;
+    add('line', { x1: x(t), y1: PT, x2: x(t), y2: PT + ih, 'class': 'bt-grid' });
+    txt(x(t), H - 8, t + 's');
+  });
+  // 兵力折線
+  const line = (key, color) => {
+    const pts = log.map((l) => x(l.t) + ',' + y(l[key])).join(' ');
+    add('polyline', { points: pts, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round' });
+    log.forEach((l) => add('circle', { cx: x(l.t), cy: y(l[key]), r: 2, fill: color }));
+  };
+  line('troopsA', '#5a8cdc');
+  line('troopsB', '#dc5a50');
+  // 圖例
+  const lg = el('div', 'bt-legend');
+  lg.innerHTML = '<span class="bt-i" style="background:#5a8cdc"></span>我方兵力　<span class="bt-i" style="background:#dc5a50"></span>敵方兵力　'
+    + '<span class="bt-i bt-i-a" style="background:rgba(90,140,220,0.35)"></span>我方防禦%背景　<span class="bt-i bt-i-a" style="background:rgba(220,90,80,0.35)"></span>敵方防禦%背景';
+  const wrap = el('div', 'battle-chart-wrap');
+  wrap.appendChild(svg);
+  wrap.appendChild(lg);
+  return wrap;
+}
+
+// v4.4 逐 tick 結算表（含防禦%/護盾/實際損兵）
+function battleLogTable(br) {
+  const tb = el('table', 'member battle-table bt-log');
+  tb.innerHTML = '<tr><th>秒</th><th>我方<br>防禦%</th><th>我方<br>護盾</th><th>敵打我<br>raw</th><th>我方損兵</th>'
+    + '<th>敵方<br>防禦%</th><th>敵方<br>護盾</th><th>我打敵<br>raw</th><th>敵方損兵</th><th>我方兵力</th><th>敵方兵力</th></tr>';
+  br.log.forEach((l) => {
+    const tr = el('tr');
+    tr.innerHTML = '<td>' + l.t + '</td>'
+      + '<td class="bt-def-a">' + l.defA + '%</td><td>' + (l.shA || '—') + '</td>'
+      + '<td class="dim">' + l.rawB + '</td><td class="bt-loss">' + l.lossA + '</td>'
+      + '<td class="bt-def-b">' + l.defB + '%</td><td>' + (l.shB || '—') + '</td>'
+      + '<td class="dim">' + l.rawA + '</td><td class="bt-loss">' + l.lossB + '</td>'
+      + '<td>' + l.troopsA + '</td><td>' + l.troopsB + '</td>';
+    tb.appendChild(tr);
+  });
+  return tb;
+}
+
 function renderBattleResult(br, foeLabel) {
   const box = document.getElementById('battleResult');
   box.innerHTML = '';
@@ -371,12 +452,14 @@ function renderBattleResult(br, foeLabel) {
   });
   box.appendChild(tb);
 
-  // 逐 tick 兵力 log（折疊）
+  // v4.4 雙方兵力曲線圖（純 SVG）
+  box.appendChild(battleChartSVG(br.log));
+
+  // 逐 tick 結算 log（折疊）：防禦%/護盾/raw/實際損兵/兵力
   const lg = el('details', 'fold battle-log');
-  const sm = el('summary', '', '逐 tick 兵力（我方 / 敵方）');
+  const sm = el('summary', '', '逐 tick 結算（防禦% / 護盾 / raw / 實際損兵）');
   lg.appendChild(sm);
-  const txt = br.log.map((l) => l.t + 's:' + l.troopsA + '/' + l.troopsB).join('　');
-  lg.appendChild(el('div', 'logline', txt));
+  lg.appendChild(battleLogTable(br));
   box.appendChild(lg);
 }
 

@@ -8,8 +8,17 @@
 //             遠程普攻 trigger v1 視同普攻；樂進「每100移速差+1%反擊機率」未實作（TODO）
 //       校準：COUNTER_K=2.0 保守值（張角實測5.6/次係數1.8-2.6、樂進5.7/次係數2.8，反推K≈2.0-2.5）；
 //             基礎機率未含「受武力/智力影響」加成（實測趙雲追擊37-39% vs 基礎15%），待校
-// v4.1：兵種系數鎖死（盾1/騎4/弓6，雙戰報校準）；新增簡易對打引擎 battle()
-// v4.2：進階效果正式接入——倒戈(ls)/移速差普攻(spdPa)/移速差sm(spdSm)，含敵方移速 opts.enemySpd
+// v4.4：battle() 導入「防禦%→除法減傷→損兵」結算管線（DEFSYS 結構化防禦表）
+//       公式來源：B站 BV1383Jz9E2b 陸服戰報 R2~R10 五筆反推（±2%）：
+//         損兵 = 原始傷害 ÷ (1+目標部曲防禦%) ÷ TROOP_HP(39.8)；防禦%為除法遞減、增益滾動疊加到期消退
+//       「受武力/智力/統率影響」放大係數 ATTR_MUL=1.81（張角黃天當立 文案200%→實測362%）
+//       護盾（張角斗轉參橫）先吸收傷害再扣兵；實測護盾10974=400×智力/10（≈274智，不乘1.81）
+//       注意：本模型既有傷害數值由台服戰報「損兵數」校準，39.8 在「模型傷害↔損兵」間自相抵消，
+//             故整合僅加 (1+D) 除法層與護盾層，不再把所有數字÷39.8
+//       已知簡化：張飛不屈層數=每 tick 1 層（實為敵方3將普攻，5秒窗口至多2層）、
+//                 如日方升/太平清領/八卦陣等「護盾消失後/無持續」效果常駐化、
+//                 率馬以驥等「按命中數」視同命中1部曲、敵方不給星石、杯影戲梟無地形判斷常駐、
+//                 于吉道心澤世（按統率和）/司馬懿/龐統 防禦數值文案不明，暫略（見 DEFSYS 註解）
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) module.exports = factory();
   else root.MODEL = factory();
@@ -22,6 +31,8 @@
   const COUNTER_K = 2.0;                // v4.3 反擊校準K：每跳傷害=係數×K（張角實測5.6/次、樂進5.7/次 → K≈2.0-2.5，取2.0保守）
   const TROOP_FAC = { '盾兵': 1, '騎兵': 4, '弓兵': 6 }; // 兵種系數（鎖死：盾5.3/騎≈20/弓≈31-37 每擊校準）
   const MAX_TROOPS = 24000;             // 雙方兵力（8000×3）
+  const TROOP_HP = 39.8;                // v4.4 每兵HP（陸服戰報反推；僅用於護盾換算，損兵管線因校準口徑抵消）
+  const ATTR_MUL = 1.81;                // v4.4 「受武力/智力/統率影響」放大係數（文案200%→實測362%）
 
   // 兵種階段移速（兵種基礎數據分頁）；缺省 940。data.json 用中文階數鍵，此處相容阿拉伯數字
   const TIER_CN = { '1階': '一階', '2階': '二階', '3階': '三階', '4階': '四階', '5階': '五階' };
@@ -79,6 +90,202 @@
   function counterTick(slot, ratio) {
     if (!slot.counter) return 0;
     return Math.min(3, slot.counter.cap * 3) * slot.counter.rate * slot.counter.coef * COUNTER_K * ratio;
+  }
+
+  // ---------- v4.4 防禦系統（DEFSYS） ----------
+  // 結構化防禦資料表；資料來源：技能數據庫 Lv10 文案（public/data.json skills[].desc，B站 BV1383Jz9E2b 驗算框架）
+  // 條目格式：
+  //   { kind:'def',    pct, attr, dur, trigger, maxStack?, decayAfter?, rate?, book? }
+  //   { kind:'shield', coef, bookCoef?, dur, cd, attr, book? }
+  //   attr: 'wu'/'zhi'/'tong' 表示「受武力/智力/統率影響」→ 結算時 ×ATTR_MUL(1.81)；無 attr 為固定值
+  //   trigger: 'na'=受普攻滾動疊層（敵方每 tick 有普攻 → 每 tick 可疊1層，dur 秒窗口）；
+  //            'cast'=跟主動技施放節奏（同 gV 模式：t≥3*(idx+1) 且 (t-3*(idx+1))%9<dur）；
+  //            'constant'=常駐（dur 給 99）
+  //   maxStack/decayAfter: 從第 decayAfter+1 層起僅 30% 效果（張飛式衰減）
+  //   rate: 觸發機率（期望値近似，如程普25%、關銀屏35%）
+  //   book: true 表示專武裝備效果，僅 slot.book==='Y' 時啟用；護盾 bookCoef=專武後係數
+  // 已收錄（Lv10 文案值）；未收錄（數值不明/過度情境化，待補）：于吉道心澤世（每10統率+0.9%）、
+  //   司馬懿三馬同槽/畢力遐方/玄冥天罡扇（無具體%）、龐統佻身飛鏃/鳳鳴鶴唳（無具體%）、
+  //   關羽青龍偃月刀（按武力差動態）、諸葛亮神機扇（按智力差動態）、呂布方天畫戟（每秒疊加至330%）、
+  //   徐晃風掣雷行/典韋冷月追魂戟（按移速差動態）、周瑜鐵劍（按燃燒數）、小喬顧曲唱和（按擊潰數）
+  const DEFSYS = {
+    '張飛': [
+      { kind: 'def', skill: '據水斷橋', pct: 160, attr: 'wu', dur: 5, trigger: 'na', maxStack: 3, decayAfter: 1 }, // 2層起衰減70%（層2,3僅30%效果）
+      { kind: 'def', skill: '丈八蛇矛', pct: 29.3, attr: 'wu', dur: 9, trigger: 'cast', book: true },              // 專武裝備：每命中1部曲+29.3%，v1視同命中1
+    ],
+    '張角': [
+      { kind: 'def', skill: '黃天當立', pct: 200, attr: 'zhi', dur: 6, trigger: 'cast' },   // 施放時+200%(受智力影響)持續6秒
+      { kind: 'def', skill: '如日方升', pct: 40, attr: 'zhi', dur: 99, trigger: 'constant' }, // 原為護盾消失後生效，v1常駐化（簡化）
+      { kind: 'def', skill: '黃天御雷幡', pct: 57, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1, book: true }, // 專武裝備：受普攻時+57%持續3秒
+      { kind: 'shield', skill: '斗轉參橫', coef: 400, bookCoef: 470, dur: 9, cd: 9, attr: 'zhi' }, // 常駐護盾（9s/冷卻9s）；專武係數400→470
+    ],
+    '關羽': [
+      { kind: 'def', skill: '率馬以驥', pct: 108, attr: 'wu', dur: 5, trigger: 'cast' },    // 主動命中後+108%持續5秒（v1視同命中1部曲、跟主動節奏）
+      { kind: 'def', skill: '水淹七軍', pct: 90, attr: 'wu', dur: 99, trigger: 'constant' }, // 原條件：部曲兵力高於50%，v1常駐化（簡化）
+      { kind: 'def', skill: '千里走單騎', pct: 25, attr: 'wu', dur: 99, trigger: 'constant' }, // 每敵部曲+25%最多5層；1v1對打僅1敵部曲 → +25%
+    ],
+    '于吉': [
+      { kind: 'def', skill: '太平清領', pct: 190, attr: 'zhi', dur: 9, trigger: 'constant' }, // 原為護盾消失時+190%持續9秒，v1常駐化（簡化）
+    ],
+    '諸葛亮': [
+      { kind: 'def', skill: '臥龍出山', pct: 84, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1 }, // 受普攻時+84%持續3秒不可疊加
+      { kind: 'def', skill: '八卦陣', pct: 37, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '左慈': [
+      { kind: 'def', skill: '遁甲天書', pct: 105, attr: 'zhi', dur: 6, trigger: 'cast' },   // 按分身數量+105%，v1視同1分身
+      { kind: 'def', skill: '太虛引靈', pct: 40, attr: 'zhi', dur: 9, trigger: 'cast' },    // 施放主動後+40%（文案未標持續，取9秒近似）
+      { kind: 'def', skill: '杯影戲梟', pct: 50, dur: 99, trigger: 'constant' },            // 原為橋/峽谷/樹林地形+50%，v1常駐化（簡化，無attr）
+      // 幻霧遁形為「分身使受到技能傷害-12.5%」（減傷非護盾），無護盾係數，v1不實作
+    ],
+    '劉備': [
+      { kind: 'def', skill: '三顧茅廬', pct: 87, attr: 'tong', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '躍馬檀溪', pct: 21, attr: 'tong', dur: 99, trigger: 'constant' }, // 可疊3層；1v1對打僅1敵部曲 → 1層
+    ],
+    '關銀屏': [
+      { kind: 'def', skill: '將門虎女', pct: 30, attr: 'wu', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '遲玉嬌姿', pct: 4.8, attr: 'wu', dur: 3, trigger: 'na', maxStack: 1, rate: 0.35 }, // 普攻後35%機率+4.8%，期望値近似
+    ],
+    '呂布': [
+      { kind: 'def', skill: '氣冠三軍', pct: 125, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '貂蟬': [
+      { kind: 'def', skill: '鳳儀相會', pct: 115, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '馬超': [
+      { kind: 'def', skill: '鐵馬戰行', pct: 115, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '孫堅': [
+      { kind: 'def', skill: '銳意疾風', pct: 155, attr: 'tong', dur: 99, trigger: 'constant' }, // 主目標野怪額外+20%不適用PVP，略
+    ],
+    '典韋': [
+      { kind: 'def', skill: '義戰宛城', pct: 110, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '孫權': [
+      { kind: 'def', skill: '乘馬射虎', pct: 93, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '甘寧': [
+      { kind: 'def', skill: '言笑解懼', pct: 45.5, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '張苞': [
+      { kind: 'def', skill: '兵無常勢', pct: 50, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '徐晃': [
+      { kind: 'def', skill: '橫刀立馬', pct: 10.5, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '曹操': [
+      { kind: 'def', skill: '短歌行', pct: 130, attr: 'tong', dur: 6, trigger: 'na', maxStack: 1 }, // 受普攻時+130%持續6秒不可疊加
+    ],
+    '曹丕': [
+      { kind: 'def', skill: '覽照幽微', pct: 5, dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '兄弟參商', pct: 23, attr: 'tong', dur: 5, trigger: 'na', maxStack: 1 }, // 受普攻後100%+23%持續5秒
+    ],
+    '呂玲綺': [
+      { kind: 'def', skill: '松貞玉剛', pct: 30.5, attr: 'wu', dur: 5, trigger: 'na', maxStack: 1 }, // 受普攻時+30.5%持續5秒不可疊加
+    ],
+    '魏延': [
+      { kind: 'def', skill: '孤膽衝鋒', pct: 25, attr: 'wu', dur: 5, trigger: 'cast' },      // 每命中1部曲+25%，v1視同命中1
+    ],
+    '陳宮': [
+      { kind: 'def', skill: '謀斷危局', pct: 50, attr: 'zhi', dur: 6, trigger: 'cast' },    // 每命中1部曲+50%，v1視同命中1
+    ],
+    '小喬': [
+      { kind: 'def', skill: '韶華如夢', pct: 64, attr: 'zhi', dur: 99, trigger: 'constant' }, // 樹林內額外+80%無地形判斷，略
+    ],
+    '黃月英': [
+      { kind: 'def', skill: '鏤月裁雲', pct: 11.4, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '法正': [
+      { kind: 'def', skill: '孝直避箭', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '魯肅': [
+      { kind: 'def', skill: '安車軟輪', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '徐庶': [
+      { kind: 'def', skill: '江山巧計', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '荀攸': [
+      { kind: 'def', skill: '奇策十三', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '程昱': [
+      { kind: 'def', skill: '知足不辱', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '糜竺': [
+      { kind: 'def', skill: '應者雲集', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '王平': [
+      { kind: 'def', skill: '穩守禦敵', pct: 10.5, attr: 'zhi', dur: 99, trigger: 'constant' },
+    ],
+    '公孫瓚': [
+      { kind: 'def', skill: '我武惟揚', pct: 15, attr: 'wu', dur: 99, trigger: 'constant' },
+    ],
+    '程普': [
+      { kind: 'def', skill: '興王定霸', pct: 40, attr: 'tong', dur: 2, trigger: 'na', maxStack: 1, rate: 0.25 }, // 25%機率+40%持續2秒，期望値近似
+    ],
+    '孟獲': [
+      { kind: 'def', skill: '憑河暴虎', pct: 30, attr: 'tong', dur: 5, trigger: 'cast' },   // 每命中1部曲+30%，v1視同命中1
+    ],
+  };
+
+  // 展開一側三將的防禦條目（過濾專武、預乘 attr 放大），供時間軸查詢
+  function defEntries(slots) {
+    const out = [];
+    slots.forEach((s, idx) => {
+      (DEFSYS[s.name] || []).forEach((e) => {
+        if (e.kind !== 'def') return;
+        if (e.book && s.book !== 'Y') return;
+        out.push({ idx, e, pct: e.pct * (e.attr ? ATTR_MUL : 1) });
+      });
+    });
+    return out;
+  }
+
+  // v4.4 防禦%時間軸：回傳 (t)=>當下防禦%（滾動疊加/到期消退已內建）
+  function defTimeline(slots) {
+    const ents = defEntries(slots);
+    if (!ents.length) return function () { return 0; };
+    return function (t) {
+      let sum = 0;
+      for (let k = 0; k < ents.length; k++) {
+        const idx = ents[k].idx, e = ents[k].e, pct = ents[k].pct;
+        if (e.trigger === 'constant') { sum += pct; continue; }
+        if (e.trigger === 'cast') {
+          // 主動技施放節奏（同 gV 模式）：t≥3*(idx+1) 且 (t-3*(idx+1))%9<dur
+          if (t >= 3 * (idx + 1) && (t - 3 * (idx + 1)) % 9 < e.dur) sum += pct;
+          continue;
+        }
+        // 'na'：受普攻疊層——敵方每 tick 有普攻，每 tick 疊1層，數 dur 秒窗口內的層數
+        let layers = 0;
+        for (let tau = 3; tau <= t; tau += 3) if (tau > t - e.dur) layers++;
+        layers = Math.min(layers, e.maxStack || 1);
+        let mult = 1;
+        if (e.decayAfter && layers > e.decayAfter) mult = 1 + 0.3 * (layers - e.decayAfter);
+        sum += pct * (e.rate || 1) * mult;
+      }
+      return sum;
+    };
+  }
+
+  // v4.4 護盾時間軸：值=coef×該將zhi/10÷TROOP_HP（損兵單位；實測 400×274/10=10974 不乘1.81）
+  // dur 9 / cd 9 → 常駐護盾：t%(dur+cd)<dur 時在場（進入戰鬥即獲得）
+  function shieldTimeline(slots) {
+    const ents = [];
+    slots.forEach((s) => {
+      (DEFSYS[s.name] || []).forEach((e) => {
+        if (e.kind !== 'shield') return;
+        if (e.book && s.book !== 'Y') return;
+        const coef = (e.bookCoef && s.book === 'Y') ? e.bookCoef : e.coef;
+        ents.push({ val: coef * s.zhi / 10 / TROOP_HP, dur: e.dur, cd: e.cd });
+      });
+    });
+    if (!ents.length) return { on: function () { return false; }, full: 0 };
+    const full = ents.reduce((p, e) => p + e.val, 0);
+    return {
+      full,
+      on: function (t) {
+        for (let k = 0; k < ents.length; k++) if (t % (ents[k].dur + ents[k].cd) < ents[k].dur) return true;
+        return false;
+      },
+    };
   }
 
   function buildSlots(team, opts) {
@@ -234,7 +441,8 @@
 
   // ---------- 簡易對打 ----------
   // enemy: { names:[3], troop:'盾兵', adv:0-5 }；對手無星石/兵書Y/無額外增傷/目標修正1
-  // 規則：雙方同用 opts 的攻%/防%（鏡像）；技能傷害不吃防禦（本模型口徑）；
+  // 規則：雙方同用 opts 的攻%/防%（鏡像）；技能傷害不吃 opts 防%（本模型口徑），但吃 DEFSYS 部曲防禦%（v4.4）；
+  //       結算管線 v4.4：raw(技能+普攻+反擊) → 目標護盾先擋 → loss=raw/(1+目標防禦%/100) → 扣兵力；
   //       普攻依剩餘兵力線性衰減（戰報實證）；治療回血不超過初始兵力；先歸零者敗，90秒到點比剩餘。
   function battle(teamA, enemyInt, targetCorr, opts, enemy) {
     opts = opts || {};
@@ -253,40 +461,67 @@
     const coreB = teamCore(B, enemyInt, targetCorr, tgtPer, Math.max(0, speedB - speedA));
 
     let troopsA = MAX_TROOPS, troopsB = MAX_TROOPS;
-    const outA = [0, 0, 0], outB = [0, 0, 0];   // 各武將累計輸出（技能+普攻+反擊）
+    const outA = [0, 0, 0], outB = [0, 0, 0];   // 各武將累計實際損兵輸出（v4.4：結算後口徑）
     const naSumA = A.reduce((p, s) => p + s.na * s.chaseMult, 0);   // v4.3：普攻含追擊期望
     const naSumB = B.reduce((p, s) => p + s.na * s.chaseMult, 0);
     let winner = 'draw', ticksUsed = 30, counterA = 0, counterB = 0;   // v4.3：反擊累計
     const log = [];
 
+    // v4.4 防禦/護盾時間軸（雙方各自獨立）
+    const defA = defTimeline(A), defB = defTimeline(B);
+    const shA = shieldTimeline(A), shB = shieldTimeline(B);
+    let poolA = 0, poolB = 0, wasA = false, wasB = false;   // 護盾剩餘（損兵單位）
+
     for (let i = 0; i < 30; i++) {
+      const t = coreA.ticks[i].t;
       const ratioA = Math.max(troopsA, 0) / MAX_TROOPS;
       const ratioB = Math.max(troopsB, 0) / MAX_TROOPS;
       // 我方→敵方
       const skillA = coreA.ticks[i].dmg;
       const naA = naSumA * ratioA;
-      const dA = Math.round((skillA + naA) * 10) / 10;
+      const dA = skillA + naA;
       // 敵方→我方
       const skillB = coreB.ticks[i].dmg;
       const naB = naSumB * ratioB;
-      const dB = Math.round((skillB + naB) * 10) / 10;
+      const dB = skillB + naB;
       // v4.3 反擊：受敵方三將普攻觸發，依我方剩餘兵力衰減；傷害打回敵方
       const cntA = A.map((s) => counterTick(s, ratioA));
       const cntB = B.map((s) => counterTick(s, ratioB));
       const cntSumA = cntA.reduce((p, v) => p + v, 0);
       const cntSumB = cntB.reduce((p, v) => p + v, 0);
 
-      troopsB = Math.max(0, Math.round((troopsB - dA - cntSumA) * 10) / 10);
-      troopsA = Math.max(0, Math.round((troopsA - dB - cntSumB) * 10) / 10);
+      // v4.4 結算管線：raw（技能+普攻+反擊）→ 目標護盾先擋 → loss=raw/(1+目標防禦%/100) → 扣兵力
+      const dPctA = defA(t), dPctB = defB(t);
+      const rawA = Math.round((dA + cntSumA) * 10) / 10;   // 我方打出的結算前總傷害
+      const rawB = Math.round((dB + cntSumB) * 10) / 10;
+      const onA = shA.on(t), onB = shB.on(t);
+      if (onA && !wasA) poolA = shA.full;                  // 護盾窗口開始時補滿
+      if (onB && !wasB) poolB = shB.full;
+      wasA = onA; wasB = onB;
+      const absB = Math.min(poolB, rawA); poolB = Math.round((poolB - absB) * 10) / 10;
+      const absA = Math.min(poolA, rawB); poolA = Math.round((poolA - absA) * 10) / 10;
+      const lossInfA = Math.round((rawA - absB) / (1 + dPctB / 100) * 10) / 10;  // A 造成 B 實際損兵
+      const lossInfB = Math.round((rawB - absA) / (1 + dPctA / 100) * 10) / 10;  // B 造成 A 實際損兵
+
+      troopsB = Math.max(0, Math.round((troopsB - lossInfA) * 10) / 10);
+      troopsA = Math.max(0, Math.round((troopsA - lossInfB) * 10) / 10);
       // 治療（各回各的、上限初始兵力）
       troopsA = Math.min(MAX_TROOPS, Math.round((troopsA + coreA.ticks[i].heal) * 10) / 10);
       troopsB = Math.min(MAX_TROOPS, Math.round((troopsB + coreB.ticks[i].heal) * 10) / 10);
 
-      outA[coreA.ticks[i].m] += dA;
-      outB[coreB.ticks[i].m] += dB;
-      for (let j = 0; j < 3; j++) { outA[j] += cntA[j]; outB[j] += cntB[j]; }
+      // 輸出歸屬：按各來源佔 raw 比例分攤結算後實際損兵
+      const shareA = rawA > 0 ? lossInfA / rawA : 0;
+      const shareB = rawB > 0 ? lossInfB / rawB : 0;
+      outA[coreA.ticks[i].m] += (skillA + naA) * shareA;
+      outB[coreB.ticks[i].m] += (skillB + naB) * shareB;
+      for (let j = 0; j < 3; j++) { outA[j] += cntA[j] * shareA; outB[j] += cntB[j] * shareB; }
       counterA += cntSumA; counterB += cntSumB;
-      log.push({ t: coreA.ticks[i].t, dA: Math.round(dA), dB: Math.round(dB),
+      log.push({ t,
+        rawA, rawB,                                     // v4.4：結算前雙方總傷害
+        defA: Math.round(dPctA * 10) / 10, defB: Math.round(dPctB * 10) / 10,   // 當下防禦%
+        shA: Math.round(poolA), shB: Math.round(poolB),                          // 護盾剩餘
+        lossA: lossInfB, lossB: lossInfA,              // v4.4：雙方實際損兵
+        dA: Math.round(lossInfA), dB: Math.round(lossInfB),   // 兼容舊欄位=實際損兵
         cA: Math.round(cntSumA), cB: Math.round(cntSumB),
         troopsA: Math.round(troopsA), troopsB: Math.round(troopsB) });
 
@@ -310,5 +545,5 @@
     };
   }
 
-  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS };
+  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS, TROOP_HP, ATTR_MUL, DEFSYS, defTimeline, shieldTimeline };
 });
