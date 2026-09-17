@@ -265,6 +265,29 @@
     };
   }
 
+  // v4.5 不屈疊層時間軸：'na' 觸發且 maxStack>1 的條目（張飛據水斷橋式），回傳該 tick 隊伍最高層數
+  function stackTimeline(slots) {
+    const ents = [];
+    slots.forEach((s) => {
+      (DEFSYS[s.name] || []).forEach((e) => {
+        if (e.kind !== 'def' || e.trigger !== 'na' || !(e.maxStack > 1)) return;
+        if (e.book && s.book !== 'Y') return;
+        ents.push(e);
+      });
+    });
+    if (!ents.length) return function () { return 0; };
+    return function (t) {
+      let mx = 0;
+      ents.forEach((e) => {
+        let layers = 0;
+        for (let tau = 3; tau <= t; tau += 3) if (tau > t - e.dur) layers++;
+        layers = Math.min(layers, e.maxStack);
+        if (layers > mx) mx = layers;
+      });
+      return mx;
+    };
+  }
+
   // v4.4 護盾時間軸：值=coef×該將zhi/10÷TROOP_HP（損兵單位；實測 400×274/10=10974 不乘1.81）
   // dur 9 / cd 9 → 常駐護盾：t%(dur+cd)<dur 時在場（進入戰鬥即獲得）
   function shieldTimeline(slots) {
@@ -394,15 +417,20 @@
       Math.max(0, speedOf(team[0].troop, team[0].tier) - enemySpd));
 
     let cumD = 0, cumH = 0, cumNA = 0;
+    // v4.5 隊伍防禦狀態時間軸（與 battle() 同一口徑：全隊各將生效防禦增益總和 / 護盾窗口 / 不屈層數）
+    const defT = defTimeline(slots), shT = shieldTimeline(slots), stT = stackTimeline(slots);
     const ticks = core.ticks.map((tk) => {
       const s = slots[tk.m];
-      const myBuffs = null; // 顯示用資料由 app 組（保持 compute 回傳精簡）
       cumD += tk.dmg; cumH += tk.heal;
       // v4.3：普攻含追擊期望（各將 na × 自身 chaseMult 後加總）
       const naTick = Math.round((slots[0].na * slots[0].chaseMult + slots[1].na * slots[1].chaseMult + slots[2].na * slots[2].chaseMult) * ratio * 10) / 10;
       cumNA = Math.round((cumNA + naTick) * 10) / 10;
       return Object.assign({}, tk, {
-        actor: s.name, skill: s.c.skill, vuln: 0, buff: 0, na: naTick, cumD, cumH, cumNA, myBuffs, enemyFx: null, apply: s.c.vfx,
+        actor: s.name, skill: s.c.skill, vuln: 0, buff: 0, na: naTick, cumD, cumH, cumNA, myBuffs: null, enemyFx: null, apply: s.c.vfx,
+        // v4.5：每 tick 隊伍防禦狀態
+        defPct: Math.round(defT(tk.t) * 10) / 10,
+        defStacks: stT(tk.t),
+        shield: shT.on(tk.t) ? Math.round(shT.full) : 0,
       });
     });
     // buff/vuln 欄位供時間軸顯示：重算每 tick 顯示值
@@ -430,9 +458,11 @@
     });
 
     const na90 = ticks[29].cumNA;
+    // v4.5 引擎未建模的效果標記（供 UI 顯示免責說明，不發明數值）
+    const unmodeled = slots.some((s) => s.name === '左慈') ? ['分身（左慈）'] : [];
     return {
       slots, grid: core.grid, facB: core.facB, h17: core.snap.reduce((a, b) => a + b, 0),
-      snap: core.snap, ticks,
+      snap: core.snap, ticks, unmodeled,
       steady: ticks[9].dmg + ticks[10].dmg + ticks[11].dmg,
       cum30: ticks[9].cumD, cum60: ticks[19].cumD, cum90: ticks[29].cumD, heal90: ticks[29].cumH,
       na90, total90: ticks[29].cumD + na90,
@@ -470,6 +500,7 @@
     // v4.4 防禦/護盾時間軸（雙方各自獨立）
     const defA = defTimeline(A), defB = defTimeline(B);
     const shA = shieldTimeline(A), shB = shieldTimeline(B);
+    const stAfn = stackTimeline(A), stBfn = stackTimeline(B);   // v4.5：不屈疊層
     let poolA = 0, poolB = 0, wasA = false, wasB = false;   // 護盾剩餘（損兵單位）
 
     for (let i = 0; i < 30; i++) {
@@ -520,6 +551,7 @@
         rawA, rawB,                                     // v4.4：結算前雙方總傷害
         defA: Math.round(dPctA * 10) / 10, defB: Math.round(dPctB * 10) / 10,   // 當下防禦%
         shA: Math.round(poolA), shB: Math.round(poolB),                          // 護盾剩餘
+        stA: stAfn(t), stB: stBfn(t),                 // v4.5：不屈疊層數
         lossA: lossInfB, lossB: lossInfA,              // v4.4：雙方實際損兵
         dA: Math.round(lossInfA), dB: Math.round(lossInfB),   // 兼容舊欄位=實際損兵
         cA: Math.round(cntSumA), cB: Math.round(cntSumB),
@@ -545,5 +577,5 @@
     };
   }
 
-  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS, TROOP_HP, ATTR_MUL, DEFSYS, defTimeline, shieldTimeline };
+  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS, TROOP_HP, ATTR_MUL, DEFSYS, defTimeline, shieldTimeline, stackTimeline };
 });

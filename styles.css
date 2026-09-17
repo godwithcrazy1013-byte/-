@@ -257,6 +257,11 @@ details.fold #memberTable { padding-bottom: 6px; }
 table.timeline { min-width: 760px; }
 .fx-sub { color: var(--dim); font-size: 11px; margin-top: 2px; max-width: 300px; white-space: normal; }
 
+/* v4.5 時間軸狀態欄（防禦%／不屈、護盾）與狀態總覽小字 */
+.tl-status { color: var(--dim); font-size: 12px; margin: -4px 0 8px; line-height: 1.7; }
+td.tl-def { color: #7ea6e8; white-space: normal; min-width: 90px; }
+td.tl-shield { color: var(--gold); white-space: normal; }
+
 /* 圖鑑 */
 .gallery-ctl {
   display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
@@ -273,32 +278,39 @@ table.timeline { min-width: 760px; }
   font-family: inherit;
 }
 .chip.on { color: var(--gold); border-color: var(--gold-dim); }
-.gallery {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
-}
-.g-card {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  padding: 12px; cursor: pointer; text-align: center;
+/* 圖鑑（v4.5 橫向列表：一列一個武將，點列展開列下全寬詳情） */
+.gallery { display: flex; flex-direction: column; gap: 8px; }
+.g-item {
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid transparent;
+  border-radius: 8px; overflow: hidden;
   transition: border-color .15s;
 }
-.g-card:hover { border-color: var(--gold-dim); }
+.g-item:hover { border-left-color: var(--gold-dim); }
+.g-item.open { border-left-color: var(--gold); }
+.g-row {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 12px; cursor: pointer;
+}
+.g-row:hover { background: #2a2118; }
 .g-face {
-  width: 64px; height: 64px; margin: 0 auto 8px;
-  border-radius: 50%; border: 2px solid var(--gold-dim); overflow: hidden;
+  width: 48px; height: 48px; flex: 0 0 auto;
+  border-radius: 8px; border: 1px solid var(--gold-dim); overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  background: var(--panel2); font-size: 24px; color: var(--gold-dim);
+  background: var(--panel2); font-size: 20px; color: var(--gold-dim);
 }
 .g-face img { width: 100%; height: 100%; object-fit: cover; }
+.g-id { min-width: 110px; }
 .g-name { color: var(--gold); font-size: 16px; font-weight: bold; }
 .g-meta { color: var(--dim); font-size: 12px; }
-.g-attrs { font-size: 12px; margin-top: 4px; }
-.g-aff { display: flex; justify-content: center; gap: 6px; margin-top: 4px; font-size: 12px; }
+.g-attrs { font-size: 12px; white-space: nowrap; }
+.g-aff { display: flex; gap: 6px; font-size: 12px; white-space: nowrap; }
 .g-aff .aff-S { color: var(--gold); font-weight: bold; }
 .g-aff .aff-A { color: var(--txt); }
-.g-aff .aff-B, .g-aff .aff-C { color: var(--dim); }
-.g-skill { color: var(--dim); font-size: 12px; margin-top: 6px; }
-.g-detail { display: none; text-align: left; margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
-.g-card.open .g-detail { display: block; }
+.g-aff .aff-B, .g-aff .aff-C, .g-aff .aff-none { color: var(--dim); }
+.g-skill { color: var(--dim); font-size: 12px; flex: 1 1 140px; min-width: 120px; }
+.g-lead-btn { margin-left: auto; flex: 0 0 auto; }
+.g-detail { display: none; text-align: left; border-top: 1px dashed var(--line); padding: 10px 14px; }
+.g-item.open .g-detail { display: block; }
 .g-sec-title { color: var(--gold-dim); font-size: 12px; margin: 8px 0 4px; }
 .g-desc { color: var(--txt); font-size: 12px; margin: 4px 0; line-height: 1.6; }
 .g-skill-line { margin: 6px 0; font-size: 12px; }
@@ -306,7 +318,6 @@ table.timeline { min-width: 760px; }
 .g-skill-meta { color: var(--dim); margin-left: 6px; font-size: 11px; }
 .g-adv { margin: 4px 0 8px; }
 .g-note { font-size: 12px; margin-top: 6px; }
-.g-card .preset { margin-top: 6px; }
 
 /* 兵種分頁 */
 .troop-card {
@@ -342,6 +353,9 @@ table.timeline { min-width: 760px; }
   nav.tabs { padding: 0 8px; }
   nav.tabs .tab { padding: 10px 12px; font-size: 14px; letter-spacing: 1px; }
   .team { grid-template-columns: 1fr; }
-  .gallery { grid-template-columns: 1fr; }
+  /* 圖鑑橫向列：允許換行、順序不變、無橫向捲軸 */
+  .g-row { gap: 8px 10px; padding: 8px 10px; }
+  .g-id { min-width: 0; }
+  .g-lead-btn { margin-left: 0; }
   .timeline-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }

@@ -274,14 +274,17 @@ function renderSummary(r, team) {
   const mt = document.getElementById('memberTable');
   mt.innerHTML = '';
   const tb = el('table', 'member');
-  tb.innerHTML = '<tr><th>位置</th><th>武將</th><th>進階</th><th>兵書</th><th>兵種</th><th>技能</th><th>快照傷害</th><th>快照治療</th><th>普攻/擊</th><th>增益窗口</th><th>易傷窗口</th></tr>';
+  tb.innerHTML = '<tr><th>位置</th><th>武將</th><th>進階</th><th>兵書</th><th>兵種</th><th>技能</th><th>快照傷害</th><th>快照治療</th><th>普攻/擊</th><th>增益窗口</th><th>易傷窗口</th><th>防禦增益／不屈</th><th>護盾</th></tr>';
   r.slots.forEach((sl, i) => {
     if (!sl) return;
     const tr = el('tr');
     const heal = Math.round(sl.c.heal + sl._snap * sl.c.ls);
+    const defProfile = genDefProfile(sl);
+    const shieldVal = genShieldVal(sl);
     tr.innerHTML = '<td>' + ['主將', '副將', '副將'][i] + '</td><td>' + sl.name + '</td><td>' + (sl.adv || 0) +
       '</td><td>' + sl.book + '</td><td>' + sl.troop + sl.tier.replace('階', '') + '</td><td>' + sl.c.skill + '</td><td>' + sl._snap +
-      '</td><td>' + heal + '</td><td>' + sl.na + '</td><td>' + sl.c.bfx + '</td><td>' + (sl.c.vfx || '—') + '</td>';
+      '</td><td>' + heal + '</td><td>' + sl.na + '</td><td>' + sl.c.bfx + '</td><td>' + (sl.c.vfx || '—') + '</td>' +
+      '<td class="tl-def">' + (defProfile || '—') + '</td><td class="tl-shield">' + (shieldVal || '—') + '</td>';
     tb.appendChild(tr);
   });
   mt.appendChild(tb);
@@ -289,25 +292,93 @@ function renderSummary(r, team) {
 
 function renderTimeline(r) {
   const tb = document.getElementById('timeline');
-  tb.innerHTML = '<tr><th>#</th><th>秒</th><th>行動</th><th>技能</th><th>增益%</th><th>易傷×</th><th>傷害</th><th>治療</th><th>普攻</th><th>累計傷</th></tr>';
+  // v4.5 時間軸標題旁的小字狀態總覽（常駐防禦增益/護盾循環/未建模標記，自動生成）
+  const wrapSec = tb.closest('.timeline-wrap');
+  if (wrapSec) {
+    let st = wrapSec.querySelector('.tl-status');
+    if (!st) {
+      st = el('div', 'tl-status');
+      const sc = wrapSec.querySelector('.timeline-scroll');
+      wrapSec.insertBefore(st, sc || null);
+    }
+    const line = teamStatusLine(r);
+    st.textContent = line ? '隊伍常駐狀態：' + line : '';
+    st.style.display = line ? '' : 'none';
+  }
+  tb.innerHTML = '<tr><th>#</th><th>秒</th><th>行動</th><th>技能</th><th>增益%</th><th>易傷×</th>'
+    + '<th>防禦%／不屈</th><th>護盾</th>'
+    + '<th>傷害</th><th>治療</th><th>普攻</th><th>累計傷</th></tr>';
   r.ticks.forEach((tk) => {
     const tr = el('tr', 'tick' + (tk.m === 0 ? ' round-start' : ''));
     const pct = (x) => Math.round(x * 1000) / 10 + '%';
     const fx = (tk.myBuffs || tk.enemyFx)
       ? '<div class="fx-sub">' + (tk.myBuffs ? '我方：' + tk.myBuffs : '') + (tk.myBuffs && tk.enemyFx ? '；' : '') + (tk.enemyFx ? '敵方：' + tk.enemyFx : '') + '</div>'
       : '';
+    // v4.5：該 tick 隊伍防禦狀態
+    const defTxt = tk.defPct > 0
+      ? '+' + tk.defPct + '%' + (tk.defStacks ? '（不屈' + tk.defStacks + '層）' : '')
+      : '—';
+    const shieldTxt = tk.shield > 0 ? String(tk.shield) : '—';
     tr.innerHTML =
       '<td>' + tk.i + '</td><td>' + tk.t + '</td>' +
       '<td class="actor"><img src="portraits/' + encodeURIComponent(tk.actor) + '.png" onerror="this.style.display=\'none\'" alt="">' + tk.actor + '</td>' +
       '<td class="skill">' + tk.skill + fx + '</td>' +
       '<td>' + pct(tk.buff) + '</td>' +
       '<td>×' + Math.round(tk.vuln * 1000) / 1000 + '</td>' +
+      '<td class="tl-def">' + defTxt + '</td>' +
+      '<td class="tl-shield">' + shieldTxt + '</td>' +
       '<td class="dmg">' + tk.dmg + '</td>' +
       '<td class="heal">' + (tk.heal || '—') + '</td>' +
       '<td class="na">' + tk.na + '</td>' +
       '<td>' + tk.cumD + '</td>';
     tb.appendChild(tr);
   });
+}
+
+// v4.5 隊伍常駐狀態總覽文字：DEFSYS 常駐/護盾條目＋未建模標記（全中文全稱、不寫死武將名）
+function teamStatusLine(r) {
+  const parts = [];
+  r.slots.forEach((sl) => {
+    (MODEL.DEFSYS[sl.name] || []).forEach((e) => {
+      if (e.book && sl.book !== 'Y') return;
+      if (e.kind === 'shield') parts.push(sl.name + '・' + e.skill + '（護盾・' + e.dur + '秒循環）');
+      else if (e.trigger === 'constant') parts.push(sl.name + '・' + e.skill + '（常駐防禦增益）');
+    });
+  });
+  (r.unmodeled || []).forEach((u) => {
+    const m = u.match(/^(.*?)（(.+)）$/);
+    parts.push(m ? (m[2] + '・' + m[1] + '（未納入試算）') : (u + '（未納入試算）'));
+  });
+  return parts.join('｜');
+}
+
+// v4.5 隊伍明細用：該將自身防禦增益概況（全中文全稱）
+function genDefProfile(sl) {
+  const items = [];
+  (MODEL.DEFSYS[sl.name] || []).forEach((e) => {
+    if (e.kind !== 'def') return;
+    if (e.book && sl.book !== 'Y') return;
+    const pct = Math.round(e.pct * (e.attr ? MODEL.ATTR_MUL : 1) * 10) / 10;
+    const how = e.trigger === 'constant' ? '常駐'
+      : e.trigger === 'cast' ? '施放主動技時'
+      : '受普攻疊層';
+    items.push(e.skill + '（' + how + '+' + pct + '%'
+      + (e.maxStack > 1 ? '・至多' + e.maxStack + '層（不屈）' : '')
+      + (e.rate ? '・機率' + Math.round(e.rate * 100) + '%' : '') + '）');
+  });
+  return items.join('、');
+}
+
+// v4.5 隊伍明細用：該將護盾值（視窗生效時的滿值，損兵單位）
+function genShieldVal(sl) {
+  let v = 0, nm = '', cyc = 0;
+  (MODEL.DEFSYS[sl.name] || []).forEach((e) => {
+    if (e.kind !== 'shield') return;
+    if (e.book && sl.book !== 'Y') return;
+    const coef = (e.bookCoef && sl.book === 'Y') ? e.bookCoef : e.coef;
+    v = coef * sl.zhi / 10 / MODEL.TROOP_HP; nm = e.skill; cyc = e.dur + e.cd;
+  });
+  return v > 0 ? (nm + '（每' + cyc + '秒循環・約' + Math.round(v) + '）') : '';
 }
 
 // ---------- 對打 ----------
@@ -392,17 +463,23 @@ function battleChartSVG(log) {
   return wrap;
 }
 
-// v4.4 逐 tick 結算表（含防禦%/護盾/實際損兵）
+// v4.4 逐 tick 結算表（含防禦%/護盾/實際損兵）；v4.5：有疊層資料才加「不屈層數」欄
 function battleLogTable(br) {
+  const hasStA = br.log.some((l) => l.stA > 0);
+  const hasStB = br.log.some((l) => l.stB > 0);
   const tb = el('table', 'member battle-table bt-log');
-  tb.innerHTML = '<tr><th>秒</th><th>我方<br>防禦%</th><th>我方<br>護盾</th><th>敵打我<br>raw</th><th>我方損兵</th>'
-    + '<th>敵方<br>防禦%</th><th>敵方<br>護盾</th><th>我打敵<br>raw</th><th>敵方損兵</th><th>我方兵力</th><th>敵方兵力</th></tr>';
+  tb.innerHTML = '<tr><th>秒</th><th>我方<br>防禦%</th>' + (hasStA ? '<th>我方<br>不屈層數</th>' : '')
+    + '<th>我方<br>護盾</th><th>敵打我<br>raw</th><th>我方損兵</th>'
+    + '<th>敵方<br>防禦%</th>' + (hasStB ? '<th>敵方<br>不屈層數</th>' : '')
+    + '<th>敵方<br>護盾</th><th>我打敵<br>raw</th><th>敵方損兵</th><th>我方兵力</th><th>敵方兵力</th></tr>';
   br.log.forEach((l) => {
     const tr = el('tr');
     tr.innerHTML = '<td>' + l.t + '</td>'
-      + '<td class="bt-def-a">' + l.defA + '%</td><td>' + (l.shA || '—') + '</td>'
+      + '<td class="bt-def-a">' + l.defA + '%</td>' + (hasStA ? '<td>' + (l.stA > 0 ? l.stA + '層' : '—') + '</td>' : '')
+      + '<td>' + (l.shA || '—') + '</td>'
       + '<td class="dim">' + l.rawB + '</td><td class="bt-loss">' + l.lossA + '</td>'
-      + '<td class="bt-def-b">' + l.defB + '%</td><td>' + (l.shB || '—') + '</td>'
+      + '<td class="bt-def-b">' + l.defB + '%</td>' + (hasStB ? '<td>' + (l.stB > 0 ? l.stB + '層' : '—') + '</td>' : '')
+      + '<td>' + (l.shB || '—') + '</td>'
       + '<td class="dim">' + l.rawA + '</td><td class="bt-loss">' + l.lossB + '</td>'
       + '<td>' + l.troopsA + '</td><td>' + l.troopsB + '</td>';
     tb.appendChild(tr);
@@ -501,6 +578,8 @@ function refresh() {
     document.getElementById('summaryCards').innerHTML = '<span class="dim">請選滿 3 名武將</span>';
     document.getElementById('memberTable').innerHTML = '';
     document.getElementById('timeline').innerHTML = '';
+    const stEl0 = document.querySelector('.timeline-wrap .tl-status');
+    if (stEl0) stEl0.style.display = 'none';
     document.getElementById('battleResult').innerHTML = '<span class="dim">請選滿 3 名武將</span>';
     document.querySelectorAll('#team .card').forEach((card, i) => {
       const s = team[i];
@@ -610,7 +689,9 @@ function renderGallery() {
     if (gFilter.fac !== '全部' && fac !== gFilter.fac) return;
     if (gFilter.q && name.indexOf(gFilter.q) < 0) return;
 
-    const card = el('div', 'g-card');
+    // v4.5 橫向列表：一列一個武將（.g-row），詳情為列下全寬區（.g-detail）
+    const item = el('div', 'g-item');
+    const row = el('div', 'g-row');
     // 頭像
     const pf = el('div', 'g-face');
     const img = document.createElement('img');
@@ -618,15 +699,16 @@ function renderGallery() {
     img.alt = name;
     img.onerror = () => { pf.innerHTML = ''; pf.classList.add('no-img'); pf.textContent = name[0]; };
     pf.appendChild(img);
-    card.appendChild(pf);
-    card.appendChild(el('div', 'g-name', name));
-    const meta = el('div', 'g-meta', fac + '・' + ((DATA.troopPref && DATA.troopPref[name]) || '—'));
-    card.appendChild(meta);
+    row.appendChild(pf);
+    // 姓名＋陣營・適性兵種
+    const idBox = el('div', 'g-id');
+    idBox.appendChild(el('div', 'g-name', name));
+    idBox.appendChild(el('div', 'g-meta', fac + '・' + ((DATA.troopPref && DATA.troopPref[name]) || '—')));
+    row.appendChild(idBox);
     // 武力/智力
     const at = DATA.attrs[name];
-    card.appendChild(el('div', 'g-attrs',
-      at ? ('武 ' + at.wu + '｜智 ' + at.zhi) : '武力／智力 待補'));
-    // 適性
+    row.appendChild(el('div', 'g-attrs', at ? ('武 ' + at.wu + '｜智 ' + at.zhi) : '武力／智力 待補'));
+    // 兵種適性徽章（盾/騎/弓 橫排）
     const af = DATA.aff[name];
     const affBox = el('div', 'g-aff');
     TROOPS.forEach((t) => {
@@ -634,12 +716,19 @@ function renderGallery() {
       const sp = el('span', 'aff-' + (v || 'none'), t.replace('兵', '') + ' ' + (v || '—'));
       affBox.appendChild(sp);
     });
-    card.appendChild(affBox);
+    row.appendChild(affBox);
     // 主動技名
     const act = activeSkillOf(name);
-    card.appendChild(el('div', 'g-skill', act ? ('主動：' + act.name) : '技能資料待補'));
+    row.appendChild(el('div', 'g-skill', act ? ('主動：' + act.name) : '技能資料待補'));
+    // 設為主將（有係數資料才給按鈕，直接排在列上）
+    if (DATA.coef[name]) {
+      const btn = el('button', 'preset g-lead-btn', '設為主將');
+      btn.addEventListener('click', (e) => { e.stopPropagation(); setAsLeader(name); });
+      row.appendChild(btn);
+    }
+    item.appendChild(row);
 
-    // 展開詳情
+    // 展開詳情（全寬，列下方）
     const det = el('div', 'g-detail');
     if (act && act.desc) {
       det.appendChild(el('div', 'g-sec-title', '主動技・' + act.name));
@@ -669,22 +758,17 @@ function renderGallery() {
       });
       det.appendChild(tb);
     }
-    // 設為主將
-    if (DATA.coef[name]) {
-      const btn = el('button', 'preset', '設為主將');
-      btn.addEventListener('click', (e) => { e.stopPropagation(); setAsLeader(name); });
-      det.appendChild(btn);
-    } else {
+    if (!DATA.coef[name]) {
       det.appendChild(el('div', 'dim g-note', '※ 試算器尚未收錄此武將（S2新武將，屬性數值待補）'));
     }
-    card.appendChild(det);
-    card.classList.toggle('open', !!gOpen[name]);
+    item.appendChild(det);
+    item.classList.toggle('open', !!gOpen[name]);
 
-    card.addEventListener('click', () => {
+    row.addEventListener('click', () => {
       gOpen[name] = !gOpen[name];
-      card.classList.toggle('open', gOpen[name]);
+      item.classList.toggle('open', gOpen[name]);
     });
-    wrap.appendChild(card);
+    wrap.appendChild(item);
   });
   if (!wrap.children.length) wrap.appendChild(el('p', 'dim', '沒有符合條件的武將'));
 }
