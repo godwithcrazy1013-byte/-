@@ -1,4 +1,6 @@
-// 策定九州傷害模型 v4.7（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// 策定九州傷害模型 v4.8（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// v4.8：普攻節奏修正——每將每秒普攻1次（用戶實測指正），每tick=3次（NA_HITS=3）；
+//       compute()/battle() 普攻總量×3，反擊受擊口徑統一為敵3將×3次=9次/tick（原反擊已是此口徑，v4.7前輸出端誤用1次/tick）
 // v4.7：「受武力/智力影響」機率校準——追擊率改用具戰報實測值（趙雲37%/馬超16%/關銀屏19%，RATE_CAL 表），
 // v4.1：兵種系數鎖死（盾1/騎4/弓6，雙戰報校準）；新增簡易對打引擎 battle()
 // v4.2：進階效果正式接入——倒戈(ls)/移速差普攻(spdPa)/移速差sm(spdSm)，含敵方移速 opts.enemySpd
@@ -29,6 +31,7 @@
   const affMul = (a) => (a === 'S' ? 1.2 : a === 'A' ? 1 : a === 'B' ? 0.8 : 0.7);
   const ZERO_ADV = { base: 0, sm: 0, team: 0, lead: 0, intl: 0, wul: 0, pa: 0, xprob: 0, vp: 0, tgt: 0, pts: 0, ls: 0, spdPa: 0, spdSm: 0 };
   const NA_K = 5.37;                    // 普攻校準K（5階盾滿兵每擊，2026-09-08戰報）
+  const NA_HITS = 3;                    // v4.8 普攻節奏：每將每秒1次普攻 → 每tick(3秒)3次（用戶實測指正；反擊受擊口徑本已如此，此版統一）
   const COUNTER_K = 2.0;                // v4.3 反擊校準K：每跳傷害=係數×K（張角實測5.6/次、樂進5.7/次 → K≈2.0-2.5，取2.0保守）
   const TROOP_FAC = { '盾兵': 1, '騎兵': 4, '弓兵': 6 }; // 兵種系數（鎖死：盾5.3/騎≈20/弓≈31-37 每擊校準）
   const MAX_TROOPS = 24000;             // 雙方兵力（8000×3）
@@ -99,10 +102,10 @@
     if (!has) return null;
     return { rate, coef, cap, trigger: ranged ? '遠程普攻(v1視同普攻)' : '普攻' };
   }
-  // 每 tick 反擊期望傷害：敵方三將各普攻一次(受普攻3次)；cap 為每秒上限、tick=3秒 → 次數=min(3, cap×3)
+  // 每 tick 反擊期望傷害：敵方三將各每秒普攻1次(=受普攻9次/tick)；cap 為每秒上限、tick=3秒 → 次數=min(9, cap×3)
   function counterTick(slot, ratio) {
     if (!slot.counter) return 0;
-    return Math.min(3, slot.counter.cap * 3) * slot.counter.rate * slot.counter.coef * COUNTER_K * ratio;
+    return Math.min(9, slot.counter.cap * 3) * slot.counter.rate * slot.counter.coef * COUNTER_K * ratio;
   }
 
   // ---------- v4.4 防禦系統（DEFSYS） ----------
@@ -436,8 +439,8 @@
     const ticks = core.ticks.map((tk) => {
       const s = slots[tk.m];
       cumD += tk.dmg; cumH += tk.heal;
-      // v4.3：普攻含追擊期望（各將 na × 自身 chaseMult 後加總）
-      const naTick = Math.round((slots[0].na * slots[0].chaseMult + slots[1].na * slots[1].chaseMult + slots[2].na * slots[2].chaseMult) * ratio * 10) / 10;
+      // v4.3：普攻含追擊期望（各將 na × 自身 chaseMult 後加總）；v4.8：×NA_HITS（每秒1次普攻）
+      const naTick = Math.round((slots[0].na * slots[0].chaseMult + slots[1].na * slots[1].chaseMult + slots[2].na * slots[2].chaseMult) * ratio * NA_HITS * 10) / 10;
       cumNA = Math.round((cumNA + naTick) * 10) / 10;
       return Object.assign({}, tk, {
         actor: s.name, skill: s.c.skill, vuln: 0, buff: 0, na: naTick, cumD, cumH, cumNA, myBuffs: null, enemyFx: null, apply: s.c.vfx,
@@ -525,11 +528,11 @@
       const ratioB = Math.max(troopsB, 0) / MAX_TROOPS;
       // 我方→敵方
       const skillA = coreA.ticks[i].dmg;
-      const naA = naSumA * ratioA;
+      const naA = naSumA * ratioA * NA_HITS;      // v4.8：每秒1次普攻 → tick內3次
       const dA = skillA + naA;
       // 敵方→我方
       const skillB = coreB.ticks[i].dmg;
-      const naB = naSumB * ratioB;
+      const naB = naSumB * ratioB * NA_HITS;
       const dB = skillB + naB;
       // v4.3 反擊：受敵方三將普攻觸發，依我方剩餘兵力衰減；傷害打回敵方
       const cntA = A.map((s) => counterTick(s, ratioA));

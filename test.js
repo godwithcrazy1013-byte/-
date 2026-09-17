@@ -47,10 +47,10 @@ const t2 = rSg.h17 === 2786;
 ok = ok && t2;
 console.log(t2 ? 'PASS' : 'FAIL', '諸葛亮階三 H17=' + rSg.h17, t2 ? '' : '期望 2786');
 
-// 普攻模型：5階盾滿兵每擊=5.37×1×1×2.305/2.346≈5.3；90秒=5.3×3×30=477
-const t3 = rSd.slots.every((s) => s.na === 5.3) && rSd.na90 === 477;
+// 普攻模型：5階盾滿兵每擊=5.37×1×1×2.305/2.346≈5.3；v4.8 每秒1次→90秒=5.3×3將×3次×30tick=1431
+const t3 = rSd.slots.every((s) => s.na === 5.3) && rSd.na90 === 1431;
 ok = ok && t3;
-console.log(t3 ? 'PASS' : 'FAIL', '普攻每擊=' + rSd.slots.map((s) => s.na).join('/') + ' 90秒=' + rSd.na90, t3 ? '' : '期望 5.3×3 / 477');
+console.log(t3 ? 'PASS' : 'FAIL', '普攻每擊=' + rSd.slots.map((s) => s.na).join('/') + ' 90秒=' + rSd.na90, t3 ? '' : '期望 5.3×3 / 1431');
 
 // ---- v4.1 對手預設資料存在性 ----
 const FOES = [
