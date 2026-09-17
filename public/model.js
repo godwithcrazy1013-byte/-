@@ -1,4 +1,9 @@
-// 策定九州傷害模型 v4.8（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// 策定九州傷害模型 v4.9（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// v4.9：補上鬥智弓缺失機制——
+//       ①黃月英【神工意匠】：部曲中智力最高武將普攻+100%、其每點智力再+1%（上限+200%），buildSlots 團隊級加成到 na
+//       ②諸葛亮【八卦陣】：主動技能7.7%機率下一秒雙施法 → 技能傷害期望×1.077
+//       ③DEFSYS 補鬥智弓專武防禦：神機扇(智力差動態→以敵智250近似+52%/cast/9s)、玄機書卷(+7%常駐)、面折廷爭(+28%受遠程普攻/3s近似)
+//       （仍未建模：隴上妝神擊潰增傷、神機扇智力差的真實動態值、面折廷爭僅遠程生效的區分）
 // v4.8：普攻節奏修正——每將每秒普攻1次（用戶實測指正），每tick=3次（NA_HITS=3）；
 //       compute()/battle() 普攻總量×3，反擊受擊口徑統一為敵3將×3次=9次/tick（原反擊已是此口徑，v4.7前輸出端誤用1次/tick）
 // v4.7：「受武力/智力影響」機率校準——追擊率改用具戰報實測值（趙雲37%/馬超16%/關銀屏19%，RATE_CAL 表），
@@ -146,6 +151,7 @@
     '諸葛亮': [
       { kind: 'def', skill: '臥龍出山', pct: 84, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1 }, // 受普攻時+84%持續3秒不可疊加
       { kind: 'def', skill: '八卦陣', pct: 37, attr: 'zhi', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '神機扇', pct: 52, attr: 'zhi', dur: 9, trigger: 'cast', book: true }, // v4.9：每點智力差+0.35%持續9秒；動態值以敵智250(智力差≈148)近似→+52%
     ],
     '左慈': [
       { kind: 'def', skill: '遁甲天書', pct: 105, attr: 'zhi', dur: 6, trigger: 'cast' },   // 按分身數量+105%，v1視同1分身
@@ -209,9 +215,11 @@
     ],
     '黃月英': [
       { kind: 'def', skill: '鏤月裁雲', pct: 11.4, attr: 'zhi', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '玄機書卷', pct: 7, attr: 'zhi', dur: 99, trigger: 'constant', book: true }, // v4.9：專武部曲防禦+7%(+20滿級文案區間取滿)
     ],
     '法正': [
       { kind: 'def', skill: '孝直避箭', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '面折廷爭', pct: 28, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1, book: true }, // v4.9：專武受遠程普攻+28%；文案未標持續，取3秒近似；僅遠程生效（對騎兵隊打折，未區分）
     ],
     '魯肅': [
       { kind: 'def', skill: '安車軟輪', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
@@ -334,7 +342,7 @@
     const tgtPer = opts.tgtPer !== undefined ? num(opts.tgtPer) : 0.2;
     const spdDiff = Math.max(0, num(opts.spdDiff));   // v4.2：我方移速 - 敵方移速（負取0）
     const fac = Object.assign({}, TROOP_FAC, opts.troopFac || {});
-    return team.map((s) => {
+    const built = team.map((s) => {
       const c = DATA.coef[s.name], a = DATA.aff[s.name], at = DATA.attrs[s.name];
       const av = getAdv(s.name, s.adv);
       const mul = affMul(a[s.troop]);
@@ -356,6 +364,15 @@
         na: Math.round(NA_K * (fac[s.troop] !== undefined ? fac[s.troop] : 1) * (1 + atkP) / (1 + defP) * (1 + av.pa + av.spdPa * spdDiff + (RATE_CAL[s.name] && RATE_CAL[s.name].paWin ? RATE_CAL[s.name].paWin : 0)) * 10) / 10,
       });
     });
+    // v4.9 黃月英【神工意匠】：部曲中智力最高武將的普攻傷害+100%，該武將每點智力再+1%，上限+200%
+    const yy = built.find((s) => s.name === '黃月英');
+    if (yy) {
+      const tgt = built.reduce((p, s) => (s.zhi > p.zhi ? s : p), built[0]);
+      const paBonus = Math.min(2, 1 + tgt.zhi * 0.01);
+      tgt.na = Math.round(tgt.na * (1 + paBonus) * 10) / 10;
+      tgt.yyPaBonus = paBonus;   // 供 UI/測試檢視
+    }
+    return built;
   }
 
   function dmg(slot, i, t, ctx) {
@@ -371,10 +388,12 @@
     const exsm = slot.book === 'N' ? slot.c.exsm : 0;
     const trick = num(slot.s1.traitP) + num(slot.s2.traitP);
     const inner = 1 + sm - exsm + ctx.buff + trick + num(slot.extra);
+    // v4.9 諸葛亮【八卦陣】：主動技能7.7%機率下一秒再釋放一次 → 期望+7.7%技能傷害
+    const bg = slot.name === '諸葛亮' ? 1.077 : 1;
     return Math.round(
       (base + slot.c.dot + zhuge) * inner
       * (1 + av.xprob) * (1 + ctx.tgtPer * av.tgt)
-      * ctx.vuln * (1 + ctx.facB) * ctx.targetCorr
+      * ctx.vuln * (1 + ctx.facB) * ctx.targetCorr * bg
     );
   }
 

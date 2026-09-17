@@ -1,4 +1,12 @@
-// 策定九州傷害模型 v4.3（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// 策定九州傷害模型 v4.9（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// v4.9：補上鬥智弓缺失機制——
+//       ①黃月英【神工意匠】：部曲中智力最高武將普攻+100%、其每點智力再+1%（上限+200%），buildSlots 團隊級加成到 na
+//       ②諸葛亮【八卦陣】：主動技能7.7%機率下一秒雙施法 → 技能傷害期望×1.077
+//       ③DEFSYS 補鬥智弓專武防禦：神機扇(智力差動態→以敵智250近似+52%/cast/9s)、玄機書卷(+7%常駐)、面折廷爭(+28%受遠程普攻/3s近似)
+//       （仍未建模：隴上妝神擊潰增傷、神機扇智力差的真實動態值、面折廷爭僅遠程生效的區分）
+// v4.8：普攻節奏修正——每將每秒普攻1次（用戶實測指正），每tick=3次（NA_HITS=3）；
+//       compute()/battle() 普攻總量×3，反擊受擊口徑統一為敵3將×3次=9次/tick（原反擊已是此口徑，v4.7前輸出端誤用1次/tick）
+// v4.7：「受武力/智力影響」機率校準——追擊率改用具戰報實測值（趙雲37%/馬超16%/關銀屏19%，RATE_CAL 表），
 // v4.1：兵種系數鎖死（盾1/騎4/弓6，雙戰報校準）；新增簡易對打引擎 battle()
 // v4.2：進階效果正式接入——倒戈(ls)/移速差普攻(spdPa)/移速差sm(spdSm)，含敵方移速 opts.enemySpd
 // v4.3：追擊/反擊 v1——data.json skills 的 chase/counter 結構欄位正式入公式
@@ -28,11 +36,21 @@
   const affMul = (a) => (a === 'S' ? 1.2 : a === 'A' ? 1 : a === 'B' ? 0.8 : 0.7);
   const ZERO_ADV = { base: 0, sm: 0, team: 0, lead: 0, intl: 0, wul: 0, pa: 0, xprob: 0, vp: 0, tgt: 0, pts: 0, ls: 0, spdPa: 0, spdSm: 0 };
   const NA_K = 5.37;                    // 普攻校準K（5階盾滿兵每擊，2026-09-08戰報）
+  const NA_HITS = 3;                    // v4.8 普攻節奏：每將每秒1次普攻 → 每tick(3秒)3次（用戶實測指正；反擊受擊口徑本已如此，此版統一）
   const COUNTER_K = 2.0;                // v4.3 反擊校準K：每跳傷害=係數×K（張角實測5.6/次、樂進5.7/次 → K≈2.0-2.5，取2.0保守）
   const TROOP_FAC = { '盾兵': 1, '騎兵': 4, '弓兵': 6 }; // 兵種系數（鎖死：盾5.3/騎≈20/弓≈31-37 每擊校準）
   const MAX_TROOPS = 24000;             // 雙方兵力（8000×3）
   const TROOP_HP = 39.8;                // v4.4 每兵HP（陸服戰報反推；僅用於護盾換算，損兵管線因校準口徑抵消）
   const ATTR_MUL = 1.81;                // v4.4 「受武力/智力/統率影響」放大係數（文案200%→實測362%）
+
+  // v4.7 「受武力/智力影響」機率校準表（破賊戰報 2026-09-17：趙雲16/43=37%、馬超5/32=16%、關銀屏≈19%）
+  // 公式反推失敗：三將擬合 k 值差五倍，判定每技能獨立係數、無通用公式 → 有實測處用實測值覆寫；
+  // 其餘「受影響」機率（嘲諷/易傷/燃燒/虛弱等）維持文案基礎值，UI 以 unmodeled 標註
+  const RATE_CAL = {
+    '趙雲':   { chase: 0.37, paWin: 2.75 },  // 威震三軍：主動後普攻+275%持續9秒、冷卻9秒 → 常駐近似
+    '馬超':   { chase: 0.16 },
+    '關銀屏': { chase: 0.19 },
+  };
 
   // 兵種階段移速（兵種基礎數據分頁）；缺省 940。data.json 用中文階數鍵，此處相容阿拉伯數字
   const TIER_CN = { '1階': '一階', '2階': '二階', '3階': '三階', '4階': '四階', '5階': '五階' };
@@ -67,6 +85,9 @@
       if (e.chase.chain && e.chase.chain > chain) chain = e.chase.chain | 0;
     }
     if (rate <= 0) return null;
+    // v4.7：實測校準覆寫（「受武力影響」加成無通用公式，用戰報實測率）
+    const cal = RATE_CAL[name];
+    if (cal && cal.chase) rate = cal.chase;
     let cf = 0;
     for (let k = 0; k < chain; k++) cf += Math.pow(rate, k);
     return { rate, chain, chainFactor: cf, mult: 1 + rate * cf };
@@ -86,10 +107,10 @@
     if (!has) return null;
     return { rate, coef, cap, trigger: ranged ? '遠程普攻(v1視同普攻)' : '普攻' };
   }
-  // 每 tick 反擊期望傷害：敵方三將各普攻一次(受普攻3次)；cap 為每秒上限、tick=3秒 → 次數=min(3, cap×3)
+  // 每 tick 反擊期望傷害：敵方三將各每秒普攻1次(=受普攻9次/tick)；cap 為每秒上限、tick=3秒 → 次數=min(9, cap×3)
   function counterTick(slot, ratio) {
     if (!slot.counter) return 0;
-    return Math.min(3, slot.counter.cap * 3) * slot.counter.rate * slot.counter.coef * COUNTER_K * ratio;
+    return Math.min(9, slot.counter.cap * 3) * slot.counter.rate * slot.counter.coef * COUNTER_K * ratio;
   }
 
   // ---------- v4.4 防禦系統（DEFSYS） ----------
@@ -130,6 +151,7 @@
     '諸葛亮': [
       { kind: 'def', skill: '臥龍出山', pct: 84, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1 }, // 受普攻時+84%持續3秒不可疊加
       { kind: 'def', skill: '八卦陣', pct: 37, attr: 'zhi', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '神機扇', pct: 52, attr: 'zhi', dur: 9, trigger: 'cast', book: true }, // v4.9：每點智力差+0.35%持續9秒；動態值以敵智250(智力差≈148)近似→+52%
     ],
     '左慈': [
       { kind: 'def', skill: '遁甲天書', pct: 105, attr: 'zhi', dur: 6, trigger: 'cast' },   // 按分身數量+105%，v1視同1分身
@@ -193,9 +215,11 @@
     ],
     '黃月英': [
       { kind: 'def', skill: '鏤月裁雲', pct: 11.4, attr: 'zhi', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '玄機書卷', pct: 7, attr: 'zhi', dur: 99, trigger: 'constant', book: true }, // v4.9：專武部曲防禦+7%(+20滿級文案區間取滿)
     ],
     '法正': [
       { kind: 'def', skill: '孝直避箭', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
+      { kind: 'def', skill: '面折廷爭', pct: 28, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1, book: true }, // v4.9：專武受遠程普攻+28%；文案未標持續，取3秒近似；僅遠程生效（對騎兵隊打折，未區分）
     ],
     '魯肅': [
       { kind: 'def', skill: '安車軟輪', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
@@ -318,7 +342,7 @@
     const tgtPer = opts.tgtPer !== undefined ? num(opts.tgtPer) : 0.2;
     const spdDiff = Math.max(0, num(opts.spdDiff));   // v4.2：我方移速 - 敵方移速（負取0）
     const fac = Object.assign({}, TROOP_FAC, opts.troopFac || {});
-    return team.map((s) => {
+    const built = team.map((s) => {
       const c = DATA.coef[s.name], a = DATA.aff[s.name], at = DATA.attrs[s.name];
       const av = getAdv(s.name, s.adv);
       const mul = affMul(a[s.troop]);
@@ -336,9 +360,19 @@
         zhi: round1(at.zhi * mul + add('智力') + (alloc === '智力' ? pts : 0)),
         defP: num(s.s1.defP) + num(s.s2.defP),
         // 滿兵每擊普攻（v5模型；兵力衰減由 battle() 依剩餘兵力動態乘）
-        na: Math.round(NA_K * (fac[s.troop] !== undefined ? fac[s.troop] : 1) * (1 + atkP) / (1 + defP) * (1 + av.pa + av.spdPa * spdDiff) * 10) / 10,
+        // v4.7：paWin=「主動後普攻增傷窗口」常駐近似（威震三軍+275%/9秒、冷卻9秒→覆蓋率≈100%）
+        na: Math.round(NA_K * (fac[s.troop] !== undefined ? fac[s.troop] : 1) * (1 + atkP) / (1 + defP) * (1 + av.pa + av.spdPa * spdDiff + (RATE_CAL[s.name] && RATE_CAL[s.name].paWin ? RATE_CAL[s.name].paWin : 0)) * 10) / 10,
       });
     });
+    // v4.9 黃月英【神工意匠】：部曲中智力最高武將的普攻傷害+100%，該武將每點智力再+1%，上限+200%
+    const yy = built.find((s) => s.name === '黃月英');
+    if (yy) {
+      const tgt = built.reduce((p, s) => (s.zhi > p.zhi ? s : p), built[0]);
+      const paBonus = Math.min(2, 1 + tgt.zhi * 0.01);
+      tgt.na = Math.round(tgt.na * (1 + paBonus) * 10) / 10;
+      tgt.yyPaBonus = paBonus;   // 供 UI/測試檢視
+    }
+    return built;
   }
 
   function dmg(slot, i, t, ctx) {
@@ -354,10 +388,12 @@
     const exsm = slot.book === 'N' ? slot.c.exsm : 0;
     const trick = num(slot.s1.traitP) + num(slot.s2.traitP);
     const inner = 1 + sm - exsm + ctx.buff + trick + num(slot.extra);
+    // v4.9 諸葛亮【八卦陣】：主動技能7.7%機率下一秒再釋放一次 → 期望+7.7%技能傷害
+    const bg = slot.name === '諸葛亮' ? 1.077 : 1;
     return Math.round(
       (base + slot.c.dot + zhuge) * inner
       * (1 + av.xprob) * (1 + ctx.tgtPer * av.tgt)
-      * ctx.vuln * (1 + ctx.facB) * ctx.targetCorr
+      * ctx.vuln * (1 + ctx.facB) * ctx.targetCorr * bg
     );
   }
 
@@ -422,8 +458,8 @@
     const ticks = core.ticks.map((tk) => {
       const s = slots[tk.m];
       cumD += tk.dmg; cumH += tk.heal;
-      // v4.3：普攻含追擊期望（各將 na × 自身 chaseMult 後加總）
-      const naTick = Math.round((slots[0].na * slots[0].chaseMult + slots[1].na * slots[1].chaseMult + slots[2].na * slots[2].chaseMult) * ratio * 10) / 10;
+      // v4.3：普攻含追擊期望（各將 na × 自身 chaseMult 後加總）；v4.8：×NA_HITS（每秒1次普攻）
+      const naTick = Math.round((slots[0].na * slots[0].chaseMult + slots[1].na * slots[1].chaseMult + slots[2].na * slots[2].chaseMult) * ratio * NA_HITS * 10) / 10;
       cumNA = Math.round((cumNA + naTick) * 10) / 10;
       return Object.assign({}, tk, {
         actor: s.name, skill: s.c.skill, vuln: 0, buff: 0, na: naTick, cumD, cumH, cumNA, myBuffs: null, enemyFx: null, apply: s.c.vfx,
@@ -458,8 +494,10 @@
     });
 
     const na90 = ticks[29].cumNA;
-    // v4.5 引擎未建模的效果標記（供 UI 顯示免責說明，不發明數值）
-    const unmodeled = slots.some((s) => s.name === '左慈') ? ['分身（左慈）'] : [];
+    // v4.5 引擎未建模的效果標記（供 UI 顯示免責說明，不發明數值）；v4.7 追加機率校準說明
+    const unmodeled = [];
+    if (slots.some((s) => s.name === '左慈')) unmodeled.push('分身（左慈）');
+    unmodeled.push('機率類效果未含「受武力/智力影響」加成（追擊已實測校準，其餘用文案基礎值）');
     return {
       slots, grid: core.grid, facB: core.facB, h17: core.snap.reduce((a, b) => a + b, 0),
       snap: core.snap, ticks, unmodeled,
@@ -509,11 +547,11 @@
       const ratioB = Math.max(troopsB, 0) / MAX_TROOPS;
       // 我方→敵方
       const skillA = coreA.ticks[i].dmg;
-      const naA = naSumA * ratioA;
+      const naA = naSumA * ratioA * NA_HITS;      // v4.8：每秒1次普攻 → tick內3次
       const dA = skillA + naA;
       // 敵方→我方
       const skillB = coreB.ticks[i].dmg;
-      const naB = naSumB * ratioB;
+      const naB = naSumB * ratioB * NA_HITS;
       const dB = skillB + naB;
       // v4.3 反擊：受敵方三將普攻觸發，依我方剩餘兵力衰減；傷害打回敵方
       const cntA = A.map((s) => counterTick(s, ratioA));
