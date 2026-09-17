@@ -317,7 +317,7 @@ function renderBattleControls() {
   ctl.innerHTML = '';
   ctl.appendChild(el('label', '', '對手'));
   const foeSel = el('select');
-  [['0', '不對戰']].concat(BATTLE_PRESETS.map((b, i) => [String(i + 1), b.label])).forEach(([v, t]) => {
+  [['-1', '不對戰']].concat(BATTLE_PRESETS.map((b, i) => [String(i), b.label])).forEach(([v, t]) => {
     const op = el('option', '', t);
     op.value = v;
     foeSel.appendChild(op);
