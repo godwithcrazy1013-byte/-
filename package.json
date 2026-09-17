@@ -1,0 +1,9 @@
+{
+  "name": "sanguo-calc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "策定九州隊伍傷害試算器（網頁版）",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}

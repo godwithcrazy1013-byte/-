@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策定九州・隊伍傷害試算器 v4.2</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>策定九州・隊伍傷害試算器 <span class="ver">v4.2</span></h1>
+  <div class="global">
+    <label>敵智力
+      <input id="enemyInt" type="number" value="100" step="1">
+    </label>
+    <label>敵移速
+      <input id="enemySpd" type="number" value="940" step="10" min="0">
+    </label>
+    <label>目標修正
+      <input id="targetCorr" type="number" value="1" step="0.1" min="0">
+    </label>
+    <span class="hint">%一律填小數（0.1＝10%）｜口徑：命中數/疊層按最大</span>
+  </div>
+  <details class="adv-params">
+    <summary>部曲攻防・普攻參數</summary>
+    <div class="global">
+      <label>我方部曲攻擊（1.305＝+130.5%）
+        <input id="atkP" type="number" value="1.305" step="0.001" min="1">
+      </label>
+      <label>敵方部曲防禦（1.346＝+134.6%）
+        <input id="defP" type="number" value="1.346" step="0.001" min="1">
+      </label>
+      <label>我方兵力比例
+        <input id="naRatio" type="number" value="1" step="0.05" min="0" max="1">
+      </label>
+    </div>
+    <p class="hint">普攻每擊＝5.37×兵種系數(盾1/騎4/弓6)×兵力比×(1+攻)/(1+防)</p>
+  </details>
+  <div id="presets" class="presets"></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-tab="calc">試算器</button>
+  <button class="tab" data-tab="generals">武將圖鑑</button>
+  <button class="tab" data-tab="troops">兵種</button>
+  <button class="tab" data-tab="s2">S2新內容</button>
+</nav>
+
+<main>
+  <!-- 分頁一：試算器 -->
+  <section id="tab-calc" class="tab-page">
+    <section id="team" class="team"></section>
+
+    <section class="summary">
+      <h2>隊伍合計</h2>
+      <div id="summaryCards" class="cards"></div>
+      <details class="fold">
+        <summary>隊伍明細</summary>
+        <div id="memberTable"></div>
+      </details>
+    </section>
+
+    <section class="battle-wrap">
+      <h2>模擬對打</h2>
+      <p class="hint">對手無星石・兵書Y・目標1；雙方同用部曲攻防%</p>
+      <div id="battleCtl" class="global battle-ctl"></div>
+      <div id="battleResult"></div>
+    </section>
+
+    <section class="timeline-wrap">
+      <h2>每3秒行動時間軸（前90秒・主將→副將→副將，每9秒一輪）</h2>
+      <div class="timeline-scroll">
+        <table id="timeline" class="timeline"></table>
+      </div>
+    </section>
+  </section>
+
+  <!-- 分頁二：武將圖鑑 -->
+  <section id="tab-generals" class="tab-page" hidden>
+    <div class="gallery-ctl">
+      <input id="gSearch" type="search" placeholder="搜尋武將名稱…">
+      <div id="gFactions" class="chips"></div>
+    </div>
+    <div id="gallery" class="gallery"></div>
+  </section>
+
+  <!-- 分頁三：兵種 -->
+  <section id="tab-troops" class="tab-page" hidden>
+    <div id="troopPage"></div>
+  </section>
+
+  <!-- 分頁四：S2新內容 -->
+  <section id="tab-s2" class="tab-page" hidden>
+    <div id="s2Page"></div>
+  </section>
+</main>
+
+<footer>
+  <p>v4.2・口徑與Excel試算器v4.2/時間軸v6.1交叉驗證一致｜<a href="RELEASE.md">更新日誌</a></p>
+  <p>未納入：呂布武力差/不屈疊層/分身/護盾/追擊/暴擊/敵方減益僅顯示</p>
+</footer>
+
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
