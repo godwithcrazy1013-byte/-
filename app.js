@@ -835,7 +835,35 @@ function renderS2Page() {
   wrap.innerHTML = '';
   const s2 = DATA.s2 || { troops: [], beasts: [], rules: [], notes: [], newGenerals: [] };
 
-  wrap.appendChild(el('h2', 's2-title', '六大新兵種（特殊兵種，解鎖：對應兵營 12 級）'));
+  if (s2.season) wrap.appendChild(el('p', 'g-meta', s2.season));
+  if (s2.source) wrap.appendChild(el('p', 'pending', s2.source));
+
+  wrap.appendChild(el('h2', 's2-title', '四大典籍職業（自由選擇專精，累積經驗解鎖專屬技能）'));
+  const cg = el('div', 's2-grid');
+  (s2.classes || []).forEach((k) => {
+    const c = el('div', 's2-card');
+    c.appendChild(el('div', 'g-name', k.name));
+    c.appendChild(el('div', 'g-meta', '定位：' + (k.role || '—')));
+    c.appendChild(el('p', 'g-desc', '已知資訊：' + k.known));
+    c.appendChild(el('p', 'g-desc', '適合玩家：' + k.impact));
+    if (k.pending) c.appendChild(el('p', 'pending', '待官方公布：' + k.pending));
+    cg.appendChild(c);
+  });
+  wrap.appendChild(cg);
+
+  wrap.appendChild(el('h2', 's2-title', '氣象計策（大世界天候系統）'));
+  const wg = el('div', 's2-grid');
+  (s2.weather || []).forEach((w) => {
+    const c = el('div', 's2-card');
+    c.appendChild(el('div', 'g-name', w.name));
+    c.appendChild(el('p', 'g-desc', '機制：' + w.mech));
+    c.appendChild(el('p', 'g-desc', '戰術用途：' + w.impact));
+    if (w.pending) c.appendChild(el('p', 'pending', '待官方公布：' + w.pending));
+    wg.appendChild(c);
+  });
+  wrap.appendChild(wg);
+
+  wrap.appendChild(el('h2', 's2-title', '六大新兵種＋空戰兵種（特殊兵種，解鎖：對應兵營 12 級）'));
   const tg = el('div', 's2-grid');
   s2.troops.forEach((t) => {
     const c = el('div', 's2-card');
