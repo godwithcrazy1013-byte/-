@@ -196,17 +196,17 @@ function renderTeam() {
 
 function fmtAdv(sl) {
   const av = sl.av, pts = [];
-  if (av.base) pts.push('base+' + av.base);
-  if (av.sm) pts.push('自身sm+' + Math.round(av.sm * 1000) / 10 + '%');
-  if (av.team) pts.push('全隊sm+' + Math.round(av.team * 1000) / 10 + '%');
-  if (av.lead) pts.push('主將sm+' + Math.round(av.lead * 1000) / 10 + '%');
-  if (av.intl) pts.push('智鏈+' + Math.round(av.intl * 1000) / 10 + '%');
-  if (av.wul) pts.push('武鏈+' + Math.round(av.wul * 1000) / 10 + '%');
-  if (av.xprob) pts.push('額外機率+' + Math.round(av.xprob * 1000) / 10 + '%');
-  if (av.vp) pts.push('易傷機率+' + Math.round(av.vp * 1000) / 10 + '%');
-  if (av.tgt) pts.push('目標數+' + av.tgt);
-  if (av.pa) pts.push('普攻增傷+' + Math.round(av.pa * 1000) / 10 + '%');
-  if (av.pts) pts.push('加點+' + av.pts + '(' + sl.alloc + ')');
+  if (av.base) pts.push('技能傷害係數+' + av.base);
+  if (av.sm) pts.push('自身技能傷害+' + Math.round(av.sm * 1000) / 10 + '%');
+  if (av.team) pts.push('全隊技能傷害+' + Math.round(av.team * 1000) / 10 + '%');
+  if (av.lead) pts.push('主將技能傷害+' + Math.round(av.lead * 1000) / 10 + '%');
+  if (av.intl) pts.push('智力最高者技能傷害+' + Math.round(av.intl * 1000) / 10 + '%');
+  if (av.wul) pts.push('武力最高者技能傷害+' + Math.round(av.wul * 1000) / 10 + '%');
+  if (av.xprob) pts.push('額外效果發動機率+' + Math.round(av.xprob * 1000) / 10 + '%');
+  if (av.vp) pts.push('易傷發動機率+' + Math.round(av.vp * 1000) / 10 + '%');
+  if (av.tgt) pts.push('目標部曲數+' + av.tgt);
+  if (av.pa) pts.push('普攻傷害+' + Math.round(av.pa * 1000) / 10 + '%');
+  if (av.pts) pts.push('屬性點+' + av.pts + '(' + sl.alloc + ')');
   return pts.length ? pts.join('｜') : '';
 }
 
@@ -561,20 +561,20 @@ let gFilter = { q: '', fac: '全部' };
 let gOpen = {};   // 展開中的卡片
 
 const ADV_LABELS = [
-  ['base', 'base', (v) => 'base+' + v],
-  ['sm', '自身sm', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['team', '全隊sm', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['lead', '主將sm', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['intl', '智鏈', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['wul', '武鏈', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['xprob', '額外機率', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['vp', '易傷機率', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['tgt', '目標數', (v) => '+' + v],
-  ['pa', '普攻增傷', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['pts', '加點', (v) => '+' + v],
-  ['ls', '倒戈', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['spdPa', '移速差(普攻)', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
-  ['spdSm', '移速差(謀)', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['base', '技能傷害係數', (v) => '+' + v],
+  ['sm', '自身技能傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['team', '全隊技能傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['lead', '主將技能傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['intl', '智力最高者技能傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['wul', '武力最高者技能傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['xprob', '額外效果發動機率', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['vp', '易傷發動機率', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['tgt', '目標部曲數', (v) => '+' + v],
+  ['pa', '普攻傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['pts', '屬性點', (v) => '+' + v],
+  ['ls', '倒戈治療', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['spdPa', '每點移速差・普攻傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
+  ['spdSm', '每點移速差・技能傷害', (v) => '+' + Math.round(v * 1000) / 10 + '%'],
 ];
 
 function fmtAdvStage(av) {
