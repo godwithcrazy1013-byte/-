@@ -259,15 +259,17 @@ function renderSummary(r, team) {
   const c = document.getElementById('summaryCards');
   c.innerHTML = '';
   const facTxt = r.facB === 0.05 ? '3同陣營 +5%' : r.facB === 0.02 ? '2同陣營 +2%' : '無陣營加成';
+  // v5.0.2：試算時長窗口（預設30秒實戰口徑），從 ticks 累計取值
+  const durEl = document.getElementById('durSel');
+  const dur = durEl ? (parseInt(durEl.value, 10) || 30) : 30;
+  const lastTick = r.ticks[Math.min(r.ticks.length, dur / 3) - 1] || r.ticks[r.ticks.length - 1];
   [
     ['H17快照', r.h17],
     ['穩態', r.steady],
-    ['30秒', r.cum30],
-    ['60秒', r.cum60],
-    ['90秒技', r.cum90],
-    ['90秒普(含追擊)', Math.round(r.na90)],
-    ['90秒合計', Math.round(r.total90)],
-    ['90秒治', r.heal90],
+    [dur + '秒技', lastTick.cumD],
+    [dur + '秒普(含追擊)', Math.round(lastTick.cumNA)],
+    [dur + '秒合計', Math.round(lastTick.cumD + lastTick.cumNA)],
+    [dur + '秒治', Math.round(lastTick.cumH)],
   ].forEach(([k, v]) => {
     const d = el('div', 'sum-card');
     d.appendChild(el('div', 'sum-k', k));
@@ -304,10 +306,10 @@ function renderSummary(r, team) {
     const shieldVal = genShieldVal(sl);
     const bkGain = sl.book === 'Y' ? (advGainTxt('book', sl.name, sl.bookLvEff || 0) || '—') : '無';
     const wpnGain = sl.book === 'Y' ? (sl.wpnEff > 0 ? (advGainTxt('wpn', sl.name, sl.wpnEff) || '—') : '白板') : '無';
-    tr.innerHTML = '<td>' + ['主將', '副將', '副將'][i] + '</td><td>' + sl.name + '</td><td>' + (sl.adv || 0) +
-      '</td><td>' + sl.book + '</td><td class="tl-bk">' + bkGain + '</td><td class="tl-bk">' + wpnGain + '</td><td>' + sl.troop + sl.tier.replace('階', '') + '</td><td>' + sl.c.skill + '</td><td>' + sl._snap +
-      '</td><td>' + heal + '</td><td>' + sl.na + '</td><td>' + sl.c.bfx + '</td><td>' + (sl.c.vfx || '—') + '</td>' +
-      '<td class="tl-def">' + (defProfile || '—') + '</td><td class="tl-shield">' + (shieldVal || '—') + '</td>';
+    tr.innerHTML = '<td data-label="位置">' + ['主將', '副將', '副將'][i] + '</td><td data-label="武將">' + sl.name + '</td><td data-label="進階">' + (sl.adv || 0) +
+      '</td><td data-label="兵書">' + sl.book + '</td><td data-label="兵書增益" class="tl-bk">' + bkGain + '</td><td data-label="專武增益" class="tl-bk">' + wpnGain + '</td><td data-label="兵種">' + sl.troop + sl.tier.replace('階', '') + '</td><td data-label="技能">' + sl.c.skill + '</td><td data-label="快照傷害">' + sl._snap +
+      '</td><td data-label="快照治療">' + heal + '</td><td data-label="普攻/擊">' + sl.na + '</td><td data-label="增益窗口">' + sl.c.bfx + '</td><td data-label="易傷窗口">' + (sl.c.vfx || '—') + '</td>' +
+      '<td data-label="防禦增益／不屈" class="tl-def">' + (defProfile || '—') + '</td><td data-label="護盾" class="tl-shield">' + (shieldVal || '—') + '</td>';
     tb.appendChild(tr);
   });
   mt.appendChild(tb);
@@ -343,17 +345,17 @@ function renderTimeline(r) {
       : '—';
     const shieldTxt = tk.shield > 0 ? String(tk.shield) : '—';
     tr.innerHTML =
-      '<td>' + tk.i + '</td><td>' + tk.t + '</td>' +
-      '<td class="actor"><img src="portraits/' + encodeURIComponent(tk.actor) + '.png" onerror="this.style.display=\'none\'" alt="">' + tk.actor + '</td>' +
-      '<td class="skill">' + tk.skill + fx + '</td>' +
-      '<td>' + pct(tk.buff) + '</td>' +
-      '<td>×' + Math.round(tk.vuln * 1000) / 1000 + '</td>' +
-      '<td class="tl-def">' + defTxt + '</td>' +
-      '<td class="tl-shield">' + shieldTxt + '</td>' +
-      '<td class="dmg">' + tk.dmg + '</td>' +
-      '<td class="heal">' + (tk.heal || '—') + '</td>' +
-      '<td class="na">' + tk.na + '</td>' +
-      '<td>' + tk.cumD + '</td>';
+      '<td data-label="#">' + tk.i + '</td><td data-label="秒">' + tk.t + '</td>' +
+      '<td data-label="行動" class="actor"><img src="portraits/' + encodeURIComponent(tk.actor) + '.png" onerror="this.style.display=\'none\'" alt="">' + tk.actor + '</td>' +
+      '<td data-label="技能" class="skill">' + tk.skill + fx + '</td>' +
+      '<td data-label="增益%">' + pct(tk.buff) + '</td>' +
+      '<td data-label="易傷×">×' + Math.round(tk.vuln * 1000) / 1000 + '</td>' +
+      '<td data-label="防禦%／不屈" class="tl-def">' + defTxt + '</td>' +
+      '<td data-label="護盾" class="tl-shield">' + shieldTxt + '</td>' +
+      '<td data-label="傷害" class="dmg">' + tk.dmg + '</td>' +
+      '<td data-label="治療" class="heal">' + (tk.heal || '—') + '</td>' +
+      '<td data-label="普攻" class="na">' + tk.na + '</td>' +
+      '<td data-label="累計傷">' + tk.cumD + '</td>';
     tb.appendChild(tr);
   });
 }
@@ -999,6 +1001,7 @@ function init() {
 
     ['enemyInt', 'enemySpd', 'targetCorr', 'atkP', 'defP', 'naRatio'].forEach((id) =>
       document.getElementById(id).addEventListener('input', refresh));
+    document.getElementById('durSel').addEventListener('change', refresh);
 
     initTabs();
     initGallery();

@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>策定九州・隊伍傷害試算器 v5.0.1</title>
+<title>策定九州・隊伍傷害試算器 v5.0.2</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header>
-  <h1>策定九州・隊伍傷害試算器 <span class="ver">v5.0.1</span></h1>
+  <h1>策定九州・隊伍傷害試算器 <span class="ver">v5.0.2</span></h1>
   <div class="global">
     <label>敵智力
       <input id="enemyInt" type="number" value="100" step="1">
@@ -18,6 +18,13 @@
     </label>
     <label>目標修正
       <input id="targetCorr" type="number" value="1" step="0.1" min="0">
+    </label>
+    <label>試算時長
+      <select id="durSel">
+        <option value="30" selected>30秒（實戰）</option>
+        <option value="60">60秒</option>
+        <option value="90">90秒（滿場）</option>
+      </select>
     </label>
     <span class="hint">%一律填小數（0.1＝10%）｜口徑：命中數/疊層按最大</span>
   </div>
@@ -96,7 +103,7 @@
 </main>
 
 <footer>
-  <p>v5.0.1・口徑與Excel試算器v4.2/時間軸v6.1交叉驗證一致｜<a href="RELEASE.md">更新日誌</a></p>
+  <p>v5.0.2・口徑與Excel試算器v4.2/時間軸v6.1交叉驗證一致｜<a href="RELEASE.md">更新日誌</a></p>
   <p>未納入：分身・暴擊・敵方減益僅顯示</p>
 </footer>
 

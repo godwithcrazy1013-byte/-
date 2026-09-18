@@ -47,6 +47,14 @@ header h1 {
   padding: 4px 6px;
   border-radius: 4px;
 }
+.global select {
+  margin-left: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--txt);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
 .hint { color: var(--dim); font-size: 12px; }
 .global.na-row { margin-top: 8px; }
 .global.na-row input { width: 64px; }
@@ -390,9 +398,29 @@ td.tl-shield { color: var(--gold); white-space: normal; }
   .sum-card { min-width: 0; padding: 8px 6px; }
   .sum-v { font-size: 18px; }
 
-  /* 表格類：縮字+橫滑 */
+  /* 表格類：時間軸/成員表在直向改卡片式，欄位全可見（只套這兩張，對打/圖鑑表維持橫滑） */
   table { font-size: 12px; }
-  .timeline-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .timeline-scroll { overflow-x: visible; -webkit-overflow-scrolling: auto; }
+  #timeline, #timeline tbody, #timeline tr, #timeline td,
+  #memberTable table.member, #memberTable table.member tbody, #memberTable table.member tr, #memberTable table.member td {
+    display: block; width: 100%; min-width: 0;
+  }
+  #timeline tr, #memberTable table.member tr {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    margin-bottom: 8px; padding: 6px 10px;
+  }
+  #timeline tr:first-child, #memberTable table.member tr:first-child { display: none; } /* 隱藏表頭列 */
+  #timeline td, #memberTable table.member td {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    padding: 3px 0; border: 0;
+  }
+  #timeline td::before, #memberTable table.member td::before {
+    content: attr(data-label); color: var(--dim); font-size: 12px; flex: 0 0 auto;
+  }
+  #timeline td.actor { justify-content: flex-start; gap: 8px; }
+  #timeline td.actor img { width: 20px; height: 20px; vertical-align: -4px; }
+  #timeline td.skill { flex-wrap: wrap; }
+  #timeline td.skill .fx-sub { flex: 0 0 100%; text-align: left; margin-top: 2px; }
   .summary h2, .timeline-wrap h2 { font-size: 15px; margin: 14px 0 8px; }
 
   /* 圖鑑列：頭像與資料上下堆疊 */
