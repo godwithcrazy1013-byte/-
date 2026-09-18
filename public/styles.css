@@ -353,16 +353,63 @@ td.tl-shield { color: var(--gold); white-space: normal; }
 .s2-list li { margin-bottom: 4px; }
 .s2-src { margin-top: 20px; }
 
-/* 手機版 */
+/* ===== 手機版（直向優先） ===== */
 @media (max-width: 768px) {
-  header { padding: 14px 12px 10px; }
-  main { padding: 14px 12px 30px; }
-  nav.tabs { padding: 0 8px; }
-  nav.tabs .tab { padding: 10px 12px; font-size: 14px; letter-spacing: 1px; }
-  .team { grid-template-columns: 1fr; }
-  /* 圖鑑橫向列：允許換行、順序不變、無橫向捲軸 */
-  .g-row { gap: 8px 10px; padding: 8px 10px; }
-  .g-id { min-width: 0; }
-  .g-lead-btn { margin-left: 0; }
+  body { font-size: 15px; }
+  header { padding: 12px 12px 8px; }
+  header h1 { font-size: 18px; margin-bottom: 8px; letter-spacing: 1px; }
+  main { padding: 12px 10px 30px; }
+  nav.tabs { padding: 0 4px; }
+  nav.tabs .tab { padding: 10px 8px; font-size: 13px; letter-spacing: 0; flex: 1; text-align: center; }
+
+  /* 全域參數：兩欄對齊，加大輸入框防 iOS 縮放 */
+  .global { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .global label { font-size: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .global input { width: 64px; margin-left: 4px; font-size: 16px; padding: 4px 4px; }
+  .global.na-row { margin-top: 2px; }
+  .hint { display: block; margin-top: 4px; }
+
+  /* 預設隊伍按鈕：兩個一排 */
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .preset { text-align: center; padding: 8px 6px; font-size: 13px; }
+
+  /* 武將卡片：單欄、緊湊 */
+  .team { grid-template-columns: 1fr; gap: 12px; margin-bottom: 16px; }
+  .card { padding: 10px 12px; }
+  .portrait { width: 64px; height: 64px; font-size: 24px; margin: 2px auto 6px; }
+  .row { margin: 4px 0; gap: 4px; }
+  .row select, .row input { font-size: 16px; padding: 6px 6px; } /* ≥16px 防 iOS 自動放大 */
+  .row select { flex: 1; min-width: 0; }
+  .row input { width: 76px; flex: 1; }
+  .row label { min-width: 28px; }
+  .stone { padding: 6px; margin: 6px 0; }
+  .stats { font-size: 13px; }
+
+  /* 摘要卡片：兩欄 */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sum-card { min-width: 0; padding: 8px 6px; }
+  .sum-v { font-size: 18px; }
+
+  /* 表格類：縮字+橫滑 */
+  table { font-size: 12px; }
   .timeline-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .summary h2, .timeline-wrap h2 { font-size: 15px; margin: 14px 0 8px; }
+
+  /* 圖鑑列：頭像與資料上下堆疊 */
+  .g-row { gap: 6px; padding: 8px; }
+  .g-row > * { min-width: 0; }
+  .g-lead-btn { margin-left: 0; padding: 6px 10px; font-size: 12px; }
+  .g-aff { white-space: normal; }
+  .g-curve-line { flex-wrap: wrap; gap: 4px 8px; }
+  .g-curve-fx { flex: 0 0 100%; }
+
+  /* S2 頁 */
+  .s2-grid { grid-template-columns: 1fr; }
+}
+
+/* 小螢幕再收斂（≤420px） */
+@media (max-width: 420px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+  .presets { grid-template-columns: 1fr 1fr; }
+  header h1 { font-size: 16px; }
 }
