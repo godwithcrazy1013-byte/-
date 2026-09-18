@@ -51,6 +51,13 @@ header h1 {
 .global.na-row { margin-top: 8px; }
 .global.na-row input { width: 64px; }
 .advline { color: var(--green); font-size: 12px; margin-top: 2px; }
+.tl-bk { font-size: 12px; color: var(--green); }
+/* 圖鑑進階成長路線（箭嘴） */
+.g-curve-skill { color: var(--gold); font-size: 12px; margin: 6px 0 2px; }
+.g-curve-line { display: flex; gap: 10px; font-size: 12px; margin-top: 2px; line-height: 1.5; }
+.g-curve-fx { color: var(--dim); flex: 0 0 42%; }
+.g-curve-val { color: var(--green); font-family: Consolas, monospace; }
+.g-curve-pending { color: var(--dim); font-size: 12px; margin-top: 2px; line-height: 1.6; }
 
 .presets { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .preset {

@@ -12,7 +12,7 @@ function slot(name, troop) {
 const TEAMS = [
   ['一隊・群騎', ['呂布', '貂蟬', '高順'], '騎兵', [3528, 4597, 15267]],
   ['二隊・蜀盾', ['關羽', '張飛', '劉備'], '盾兵', [2219, 2196, 7959]],
-  ['三隊・蜀弓', ['諸葛亮', '法正', '黃月英'], '弓兵', [2524, 2524, 9198]],
+  ['三隊・蜀弓', ['諸葛亮', '法正', '黃月英'], '弓兵', [2654, 2654, 9713]],   // v4.9：含八卦陣×1.077
   ['四隊・蜀騎', ['馬超', '趙雲', '張星彩'], '騎兵', [813, 813, 2783]],
   ['五隊・吳弓', ['周瑜', '小喬', '孫權'], '弓兵', [2487, 2249, 7582]],
 ];
@@ -39,13 +39,19 @@ const t1 = rSd.snap[1] === 831 && rSd.h17 === 2462;
 ok = ok && t1;
 console.log(t1 ? 'PASS' : 'FAIL', '張飛五階 snap=' + rSd.snap[1] + ' H17=' + rSd.h17, t1 ? '' : '期望 831 / 2462（v4.5 條件效果全額：三階受擊sm+15%）');
 
-// 諸葛亮三階：base+50/再次施放+5%/加點+20(自動→智力) → H17 2524→2786
+// 諸葛亮三階：base+50/再次施放+5%/加點+20(自動→智力) → v4.9 含八卦陣×1.077 → H17 2936
 let sg = ['諸葛亮', '法正', '黃月英'].map((n) => slot(n, '弓兵'));
 sg[0].adv = 3;
 const rSg = MODEL.compute(sg, 100, 1);
-const t2 = rSg.h17 === 2786;
+const t2 = rSg.h17 === 2936;
 ok = ok && t2;
-console.log(t2 ? 'PASS' : 'FAIL', '諸葛亮階三 H17=' + rSg.h17, t2 ? '' : '期望 2786');
+console.log(t2 ? 'PASS' : 'FAIL', '諸葛亮階三 H17=' + rSg.h17, t2 ? '' : '期望 2936（v4.9：八卦陣雙施法期望+7.7%）');
+
+// v4.9 黃月英【神工意匠】：部曲智力最高者(諸葛亮,zhi≥100→滿額) 普攻+200%
+const t2b = rSg.slots[0].yyPaBonus === 2 && rSg.slots[0].na > 85 && !rSg.slots[1].yyPaBonus;
+ok = ok && t2b;
+console.log(t2b ? 'PASS' : 'FAIL', '神工意匠 諸葛亮na=' + rSg.slots[0].na + ' bonus=' + rSg.slots[0].yyPaBonus, t2b ? '' : '期望 bonus=2');
+
 
 // 普攻模型：5階盾滿兵每擊=5.37×1×1×2.305/2.346≈5.3；v4.8 每秒1次→90秒=5.3×3將×3次×30tick=1431
 const t3 = rSd.slots.every((s) => s.na === 5.3) && rSd.na90 === 1431;
@@ -106,16 +112,17 @@ console.log(a4 ? 'PASS' : 'FAIL', 'A組匯出 程昱xprob=' + ADV['程昱'][3].x
   + ' 劉備xprob=' + ADV['劉備'][1].xprob + ' 張飛sm增量=' + (ADV['張飛'][3].sm - ADV['張飛'][2].sm),
   a4 ? '' : '期望 0.05/0.1/0.3/0.15（v4.5 全額）');
 
-// ---- v4.2 移速差實算：樂進隊（5階騎1200 vs 敵940 → spdDiff=260，spdSm貢獻26%）----
+// ---- v4.2 移速差實算：樂進隊（5階騎1200 vs 敵940 → spdDiff=260）----
+// v5.0：spdSmEff = 武將星級0.26 + 兵書0階基礎0.08×260/100=0.208 → 0.468（兵書進階機制納入）
 const spdTeam = ['樂進', '貂蟬', '高順'].map((n) => slot(n, '騎兵'));
 spdTeam[0].adv = 3;
 const rSpdLo = MODEL.compute(spdTeam, 100, 1, { enemySpd: 940 });
 const rSpdHi = MODEL.compute(spdTeam, 100, 1, { enemySpd: 1200 });
 const spdEff = rSpdLo.slots[0].spdSmEff;
-const a5 = spdEff > 0.25 && spdEff < 0.27 && rSpdLo.h17 > rSpdHi.h17;
+const a5 = spdEff > 0.45 && spdEff < 0.49 && rSpdLo.h17 > rSpdHi.h17;
 ok = ok && a5;
 console.log(a5 ? 'PASS' : 'FAIL', '移速差 樂進spdSmEff=' + spdEff.toFixed(3) + ' H17: 敵940→' + rSpdLo.h17 + ' vs 敵1200→' + rSpdHi.h17,
-  a5 ? '' : '期望 spdSmEff≈0.26 且敵940時H17較高');
+  a5 ? '' : '期望 spdSmEff≈0.468(=0.26+兵書0階0.208) 且敵940時H17較高');
 
 // ---- v4.2 普攻增傷實算：趙雲一階 pa+0.3 入 na（v4.7 起 paWin=2.75 常駐，倍率=(4.05+0.3)/4.05） ----
 const z0 = [slot('趙雲', '騎兵'), slot('貂蟬', '騎兵'), slot('高順', '騎兵')];
@@ -158,3 +165,39 @@ console.log(c3 ? 'PASS' : 'FAIL', '反擊 張角隊 counterA=' + bCnt.counterA
   + '；無反擊隊 counterA/B=' + bPlain.counterA + '/' + bPlain.counterB);
 
 console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
+
+// ---- v5.0 兵書星級/專武進階機制 ----
+(function () {
+  let ok5 = true;
+  // 1) 門檻（v5.1）：張飛 wpnLv=3 但 adv=0/bookLv=0 → clamp 0（白板）+ gateNote
+  const t1 = [slot('張飛', '盾兵'), slot('劉備', '盾兵'), slot('關羽', '盾兵')];
+  t1[0].wpnLv = 3;
+  const r1 = MODEL.compute(t1, 100, 1);
+  const g1 = r1.gateNotes.length > 0 && r1.slots[0].wpnEff === 0;
+  // 2) 滿星滿兵書：wpnLv=5 生效，專武防禦時間軸數值上升（ticks defPct 更高）
+  const t2 = [slot('張飛', '盾兵'), slot('劉備', '盾兵'), slot('關羽', '盾兵')];
+  t2.forEach((s) => { s.adv = 5; s.bookLv = 5; });
+  t2[0].wpnLv = 5;
+  const r2 = MODEL.compute(t2, 100, 1);
+  const baseDef = r1.ticks.map((t) => t.defPct), upDef = r2.ticks.map((t) => t.defPct);
+  const g2 = r2.gateNotes.length === 0 && upDef[10] > baseDef[10];
+  // 3) book=N → 曹丕無專武反擊
+  const t3 = [slot('曹丕', '騎兵'), slot('曹操', '騎兵'), slot('徐晃', '騎兵')];
+  const r3y = MODEL.compute(t3, 100, 1);
+  t3[0].book = 'N';
+  const r3n = MODEL.compute(t3, 100, 1);
+  const g3 = r3y.slots[0].counter && r3y.slots[0].counter.coef === 1.7 && r3n.slots[0].counter === null;
+  // 4) 徐晃兵書：bookLv 0→5，H17 提升（全體技傷 7%→17%）
+  const t4 = [slot('徐晃', '騎兵'), slot('典韋', '騎兵'), slot('曹操', '騎兵')];
+  const r4a = MODEL.compute(t4, 100, 1);
+  t4[0].bookLv = 5;
+  const r4b = MODEL.compute(t4, 100, 1);
+  const g4 = r4b.h17 > r4a.h17;
+  // 5) 預設五隊與 v4.9 完全一致（上面主迴圈已鎖 H17/穩態/30秒）
+  ok5 = g1 && g2 && g3 && g4;
+  console.log(g1 ? 'PASS' : 'FAIL', 'v5.1門檻 wpnLv3+adv0 → clamp0(白板) + gateNote');
+  console.log(g2 ? 'PASS' : 'FAIL', 'v5.1滿配 wpnLv5 專武防禦生效 t10def ' + baseDef[10] + '→' + upDef[10]);
+  console.log(g3 ? 'PASS' : 'FAIL', 'v5.1 book=Y白板專武 coef1.7；book=N → 反擊關閉(null)');
+  console.log(g4 ? 'PASS' : 'FAIL', 'v5.0徐晃兵書 H17 ' + r4a.h17 + '→' + r4b.h17);
+  ok = ok && ok5;
+})();

@@ -1,4 +1,16 @@
-// 策定九州傷害模型 v4.9（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// 策定九州傷害模型 v5.0（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// v5.1（用戶 2026-09-18 20:03 指正）：白板制度——兵書0星=白板兵書（基礎效果常駐，非無兵書）；
+//       專武0階=白板專武（book=Y 即自動持有 0階兵書+0階專武，基礎值=v0 常駐）。
+//       ①slot 新增 bookLv(兵書星0-5,預設0)、wpnLv(專武進階0-5,預設0)。曲線 v(lv)=v0+lv×step。
+//       ②門檻規則（用戶2026-09-18確認）：有兵書(book=Y)才解鎖專武0階；wpnLv≥2 需 adv≥5(武將滿星)且 bookLv≥5(兵書滿星)，
+//         否則 clamp 到 1 並記 gateNotes；book=N → wpnEff=0、專武反擊/專武防禦全關（修正舊版「無兵書仍有專武反擊」）
+//       ③專武曲線（CURVES.wpn）：DB箭頭經截圖證實為「0階→1階」(荀攸/荀彧/程昱/糜竺)，v(lv)=v0+lv×step，lv=1 即舊模型值
+//         已接：張飛丈八蛇矛(防禦wstep9.3)、張角黃天御雷幡(18)、諸葛亮神機扇(16.3)、黃月英玄機書卷(2)、
+//               反擊係數 張角/甘寧/曹丕/樂進
+//       ④兵書曲線（CURVES.book）：只接「新增量」效果（bookLv=0 時貢獻=0，不改舊輸出）：
+//         樂進移速差技傷(0.08+0.02×lv %/點)、張星彩移速差普攻(0.36+0.18×lv %/點)、徐晃全體技傷(7+2×lv %)
+//       ⑤已收錄未接入（避免改動舊值，列 unmodeled）：其餘兵書/專武曲線（見 CURVES 註解與 Excel「進階曲線」分頁87列），
+//         特別是張燕兵書反擊係數(6→7)、程普兵書不屈率——舊模型常駐值對應的參照階不明，待逐條遷移
 // v4.9：補上鬥智弓缺失機制——
 //       ①黃月英【神工意匠】：部曲中智力最高武將普攻+100%、其每點智力再+1%（上限+200%），buildSlots 團隊級加成到 na
 //       ②諸葛亮【八卦陣】：主動技能7.7%機率下一秒雙施法 → 技能傷害期望×1.077
@@ -52,6 +64,47 @@
     '關銀屏': { chase: 0.19 },
   };
 
+  // ---------- v5.0 進階曲線（兵書星級 / 專武進階） ----------
+  // 數據來源：2026-09-18 四十張遊戲內進階預覽截圖（亮星數確認區間）+ 資料庫箭頭（已校準=0階→1階）
+  // 公式：v(lv) = v0 + lv × step（0→5 階線性等差；跨武將同效果步長一致，部曲防禦≈6.0/階，已驗證）
+  // wpn（專武）：lv=1 即 v4.9 及以前模型所用值（DB 箭頭的「下一階」）。book=N 時整組不生效。
+  //   defPct：部曲防禦%（接到 DEFSYS book 條目 wstep）；counterCoef：反擊係數（接到 counterOf）
+  // book（兵書/覺醒技進階）：v(lv)=v0+lv×step；白板(0星)即常駐 v0 基礎值（v5.1：0階=白板有基礎效果）
+  //   spdSm：每點移速差技能傷害%(0.08=0.08%)；spdPa：每點移速差普攻%；teamSm：全體技能傷害%
+  // 已收錄未接入（舊模型常駐值參照階不明，遷移後移出此註解）：
+  //   兵書部曲防禦類：糜竺32→36(4→5)/程昱33→36/荀彧19.1→22.8/曹丕60→67/張燕25→31/張寶25→32/張梁54→66/
+  //     廖化19→25/關興19.2→25.3/張苞57.4→63.5/孫堅40→59/黃蓋25.3→31.3/程普4.1→5.5+每層普攻12.3→16.2/甘寧60→68/王平65→77/步練師28→31
+  //   兵書輸出類：糜竺普攻158→175/程昱多段27→31/荀彧易傷率15.5→18.5/曹丕技傷8.8→9.9/徐晃防禦74.7→85.4/
+  //     張寶係數54→67/張梁普攻50→61/廖化武力最高技傷8→10/關興普攻40→52/張苞技傷72→80/孟獲不屈15.4→19.1+係數26→29.8/甘寧泥潭增傷120→140
+  //   專武：荀攸/程昱/荀彧/糜竺(技傷+防禦)、曹丕反擊後防禦、徐晃三項、孟獲虛弱、張燕三項、張寶三項、張梁係數21→31、
+  //     廖化兩項、關興三項、張苞普攻+固定+1命中、張星彩兩項、孫堅兩項、黃蓋兩項、程普兩項、甘寧防禦26→38、王平兩項
+  const CURVES = {
+    wpn: {
+      '張飛': { defPct: { v0: 20, step: 9.3 } },              // 丈八蛇矛：每命中部曲+防禦%（0階20/1階29.3）
+      '張角': { defPct: { v0: 39, step: 18 }, counterCoef: { v0: 1.8, step: 0.8 } }, // 黃天御雷幡
+      '諸葛亮': { defPct: { v0: 35.7, step: 16.3 } },          // 神機扇：每點智力差0.24→0.35%×敵智差148近似
+      '黃月英': { defPct: { v0: 5, step: 2 } },                // 玄機書卷
+      '甘寧': { counterCoef: { v0: 0.3, step: 0.1 } },         // 狂瀾鑌鐵刀
+      '曹丕': { counterCoef: { v0: 1.7, step: 0.8 } },         // 飛景劍
+      '樂進': { counterCoef: { v0: 1.9, step: 0.9 } },         // 雪志無畏刀
+    },
+    book: {
+      '樂進': { spdSm: { v0: 0.08, step: 0.02 } },             // 當敵制決：每點移速差技傷%（2階0.12/3階0.14）
+      '張星彩': { spdPa: { v0: 0.36, step: 0.18 } },           // 將門鳳儀：每點移速差普攻%（2階0.72/3階0.90）
+      '徐晃': { teamSm: { v0: 7, step: 2 } },                  // 長驅直入：泥潭後全體技傷%（2階11/3階13，6秒窗口常駐近似）
+    },
+  };
+  // v5.0 門檻規則（v5.1 修正）：book=N→無兵書無專武；book=Y→白板兵書+白板專武(0階)常駐；
+  // 專武升階(≥1階)需武將滿星(adv≥5)+兵書滿星(bookLv≥5)（用本體+兵書升專武的前置）
+  function wpnEffOf(s) {
+    if (s.book !== 'Y') return { lv: 0, note: '無兵書→無專武' };
+    let lv = s.wpnLv === undefined ? 0 : (s.wpnLv | 0);
+    if (lv >= 1 && !((s.adv | 0) >= 5 && (s.bookLv | 0) >= 5)) {
+      return { lv: 0, note: s.name + '：專武升階需武將滿星+兵書滿星，已限制為0階（白板）' };
+    }
+    return { lv: lv, note: '' };
+  }
+
   // 兵種階段移速（兵種基礎數據分頁）；缺省 940。data.json 用中文階數鍵，此處相容阿拉伯數字
   const TIER_CN = { '1階': '一階', '2階': '二階', '3階': '三階', '4階': '四階', '5階': '五階' };
   function speedOf(troop, tier) {
@@ -61,7 +114,7 @@
 
   function defaultSlot(name) {
     return {
-      name: name || '', book: 'Y', troop: '騎兵', tier: '5階',
+      name: name || '', book: 'Y', bookLv: 0, wpnLv: 0, troop: '騎兵', tier: '5階',
       adv: 0, alloc: '自動',
       s1: { attr: '無', val: '', def: '無', defP: '', trait: '無', traitP: '' },
       s2: { attr: '無', val: '', def: '無', defP: '', trait: '無', traitP: '' },
@@ -132,12 +185,12 @@
   const DEFSYS = {
     '張飛': [
       { kind: 'def', skill: '據水斷橋', pct: 160, attr: 'wu', dur: 5, trigger: 'na', maxStack: 3, decayAfter: 1 }, // 2層起衰減70%（層2,3僅30%效果）
-      { kind: 'def', skill: '丈八蛇矛', pct: 29.3, attr: 'wu', dur: 9, trigger: 'cast', book: true },              // 專武裝備：每命中1部曲+29.3%，v1視同命中1
+      { kind: 'def', skill: '丈八蛇矛', pct: 29.3, wstep: 9.3, attr: 'wu', dur: 9, trigger: 'cast', book: true },   // 專武裝備：每命中1部曲+29.3%(1階,0階20,wstep9.3)，v1視同命中1
     ],
     '張角': [
       { kind: 'def', skill: '黃天當立', pct: 200, attr: 'zhi', dur: 6, trigger: 'cast' },   // 施放時+200%(受智力影響)持續6秒
       { kind: 'def', skill: '如日方升', pct: 40, attr: 'zhi', dur: 99, trigger: 'constant' }, // 原為護盾消失後生效，v1常駐化（簡化）
-      { kind: 'def', skill: '黃天御雷幡', pct: 57, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1, book: true }, // 專武裝備：受普攻時+57%持續3秒
+      { kind: 'def', skill: '黃天御雷幡', pct: 57, wstep: 18, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1, book: true }, // 專武裝備：受普攻時+57%(1階,0階39,wstep18)持續3秒
       { kind: 'shield', skill: '斗轉參橫', coef: 400, bookCoef: 470, dur: 9, cd: 9, attr: 'zhi' }, // 常駐護盾（9s/冷卻9s）；專武係數400→470
     ],
     '關羽': [
@@ -151,7 +204,7 @@
     '諸葛亮': [
       { kind: 'def', skill: '臥龍出山', pct: 84, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1 }, // 受普攻時+84%持續3秒不可疊加
       { kind: 'def', skill: '八卦陣', pct: 37, attr: 'zhi', dur: 99, trigger: 'constant' },
-      { kind: 'def', skill: '神機扇', pct: 52, attr: 'zhi', dur: 9, trigger: 'cast', book: true }, // v4.9：每點智力差+0.35%持續9秒；動態值以敵智250(智力差≈148)近似→+52%
+      { kind: 'def', skill: '神機扇', pct: 52, wstep: 16.3, attr: 'zhi', dur: 9, trigger: 'cast', book: true }, // v4.9：每點智力差+0.35%持續9秒；動態值以敵智250(智力差≈148)近似→+52%；v5.0 wstep=0.11×148(0階0.24/階)
     ],
     '左慈': [
       { kind: 'def', skill: '遁甲天書', pct: 105, attr: 'zhi', dur: 6, trigger: 'cast' },   // 按分身數量+105%，v1視同1分身
@@ -215,7 +268,7 @@
     ],
     '黃月英': [
       { kind: 'def', skill: '鏤月裁雲', pct: 11.4, attr: 'zhi', dur: 99, trigger: 'constant' },
-      { kind: 'def', skill: '玄機書卷', pct: 7, attr: 'zhi', dur: 99, trigger: 'constant', book: true }, // v4.9：專武部曲防禦+7%(+20滿級文案區間取滿)
+      { kind: 'def', skill: '玄機書卷', pct: 7, wstep: 2, attr: 'zhi', dur: 99, trigger: 'constant', book: true }, // v4.9：專武部曲防禦+7%(1階,0階5,wstep2)
     ],
     '法正': [
       { kind: 'def', skill: '孝直避箭', pct: 10, attr: 'zhi', dur: 99, trigger: 'constant' },
@@ -251,13 +304,16 @@
   };
 
   // 展開一側三將的防禦條目（過濾專武、預乘 attr 放大），供時間軸查詢
+  // v5.0：book 條目依 wpnEff 用 wstep 換算（wstep=每階增量，e.pct=1階值；wpnEff=0→0階值）
   function defEntries(slots) {
     const out = [];
     slots.forEach((s, idx) => {
       (DEFSYS[s.name] || []).forEach((e) => {
         if (e.kind !== 'def') return;
         if (e.book && s.book !== 'Y') return;
-        out.push({ idx, e, pct: e.pct * (e.attr ? ATTR_MUL : 1) });
+        let pct = e.pct;
+        if (e.book && e.wstep) pct = e.pct + ((s.wpnEff === undefined ? 0 : s.wpnEff) - 1) * e.wstep;
+        out.push({ idx, e, pct: pct * (e.attr ? ATTR_MUL : 1) });
       });
     });
     return out;
@@ -353,15 +409,32 @@
       const pts = av.pts;
       const spdSmEff = av.spdSm * spdDiff;            // v4.2：移速差→技能傷害
       const chase = chaseOf(s.name);                  // v4.3：追擊（額外普攻期望）
+      // ---------- v5.0：兵書星級 / 專武進階 ----------
+      const wpn = wpnEffOf(s);
+      const bkLv = s.book === 'Y' ? (s.bookLv | 0) : 0;   // 無兵書→兵書效果0
+      let counter = counterOf(s.name);
+      const wCurve = CURVES.wpn[s.name];
+      if (counter && wCurve && wCurve.counterCoef) {      // 專武反擊係數：book=N 無專武→整個反擊關閉
+        counter = s.book === 'Y'
+          ? Object.assign({}, counter, { coef: wCurve.counterCoef.v0 + wCurve.counterCoef.step * wpn.lv })
+          : null;
+      }
+      const bCurve = CURVES.book[s.name];
+      const bkSpdSm = bCurve && bCurve.spdSm ? (bCurve.spdSm.v0 + bCurve.spdSm.step * bkLv) / 100 : 0; // %/點→小數
+      const bkSpdPa = bCurve && bCurve.spdPa ? (bCurve.spdPa.v0 + bCurve.spdPa.step * bkLv) / 100 : 0;
+      const bkTeamSm = bCurve && bCurve.teamSm ? (bCurve.teamSm.v0 + bCurve.teamSm.step * bkLv) / 100 : 0;
       return Object.assign({}, s, {
-        c, fac: a.fac, mul, aff: a[s.troop], av, alloc, spdSmEff,
-        chase, chaseMult: chase ? chase.mult : 1, counter: counterOf(s.name),
+        c, fac: a.fac, mul, aff: a[s.troop], av, alloc, spdSmEff: spdSmEff + bkSpdSm * spdDiff,
+        wpnEff: wpn.lv, gateNote: wpn.note,
+        bookSm: bkTeamSm, bookSpdSm: bkSpdSm, bookSpdPa: bkSpdPa, bookLvEff: bkLv,
+        chase, chaseMult: chase ? chase.mult : 1, counter,
         wu: round1(at.wu * mul + add('武力') + (alloc === '武力' ? pts : 0)),
         zhi: round1(at.zhi * mul + add('智力') + (alloc === '智力' ? pts : 0)),
         defP: num(s.s1.defP) + num(s.s2.defP),
         // 滿兵每擊普攻（v5模型；兵力衰減由 battle() 依剩餘兵力動態乘）
         // v4.7：paWin=「主動後普攻增傷窗口」常駐近似（威震三軍+275%/9秒、冷卻9秒→覆蓋率≈100%）
-        na: Math.round(NA_K * (fac[s.troop] !== undefined ? fac[s.troop] : 1) * (1 + atkP) / (1 + defP) * (1 + av.pa + av.spdPa * spdDiff + (RATE_CAL[s.name] && RATE_CAL[s.name].paWin ? RATE_CAL[s.name].paWin : 0)) * 10) / 10,
+        // v5.1：兵書白板(0星)即常駐 v0；每星再 +step（樂進/張星彩系）
+        na: Math.round(NA_K * (fac[s.troop] !== undefined ? fac[s.troop] : 1) * (1 + atkP) / (1 + defP) * (1 + av.pa + av.spdPa * spdDiff + bkSpdPa * spdDiff + (RATE_CAL[s.name] && RATE_CAL[s.name].paWin ? RATE_CAL[s.name].paWin : 0)) * 10) / 10,
       });
     });
     // v4.9 黃月英【神工意匠】：部曲中智力最高武將的普攻傷害+100%，該武將每點智力再+1%，上限+200%
@@ -381,7 +454,7 @@
     const zhuge = slot.name === '諸葛亮'
       ? 3.6 * Math.max(0, slot.zhi - ctx.enemyInt) * (slot.book === 'Y' ? 1.154 : 1) * (1 + (slot.adv >= 5 ? 0.1 : 0))
       : 0;
-    let sm = slot.c.sm + av.sm + slot.spdSmEff;
+    let sm = slot.c.sm + av.sm + slot.spdSmEff + (slot.bookSm || 0);   // v5.0：+兵書全體技傷(徐晃系)
     if (t !== null && slot.name === '呂布') {
       sm = (slot.book === 'N' ? 0 : Math.min(0.022 * t, 0.95)) + (t >= 3 * (i + 1) + 9 ? 0.5 : 0);
     }
@@ -494,13 +567,15 @@
     });
 
     const na90 = ticks[29].cumNA;
-    // v4.5 引擎未建模的效果標記（供 UI 顯示免責說明，不發明數值）；v4.7 追加機率校準說明
+    // v4.5 引擎未建模的效果標記（供 UI 顯示，不發明數值）；v5.1：按用戶要求隱藏校準口徑/收錄進度類說明
     const unmodeled = [];
     if (slots.some((s) => s.name === '左慈')) unmodeled.push('分身（左慈）');
-    unmodeled.push('機率類效果未含「受武力/智力影響」加成（追擊已實測校準，其餘用文案基礎值）');
+    // v5.0：門檻提示（未滿足滿星+滿兵書卻選專武升階時）
+    const gateNotes = slots.map((s) => s.gateNote).filter(Boolean);
+    if (gateNotes.length) unmodeled.push('進階門檻：' + gateNotes.join('；'));
     return {
       slots, grid: core.grid, facB: core.facB, h17: core.snap.reduce((a, b) => a + b, 0),
-      snap: core.snap, ticks, unmodeled,
+      snap: core.snap, ticks, unmodeled, gateNotes,
       steady: ticks[9].dmg + ticks[10].dmg + ticks[11].dmg,
       cum30: ticks[9].cumD, cum60: ticks[19].cumD, cum90: ticks[29].cumD, heal90: ticks[29].cumH,
       na90, total90: ticks[29].cumD + na90,
@@ -615,5 +690,5 @@
     };
   }
 
-  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS, TROOP_HP, ATTR_MUL, DEFSYS, defTimeline, shieldTimeline, stackTimeline };
+  return { compute, battle, defaultSlot, num, speedOf, NA_K, COUNTER_K, TROOP_FAC, MAX_TROOPS, TROOP_HP, ATTR_MUL, DEFSYS, CURVES, wpnEffOf, defTimeline, shieldTimeline, stackTimeline };
 });

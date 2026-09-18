@@ -8,6 +8,7 @@ const ATTRS = ['武力', '智力', '統率', '無'];
 const DEFS = ['弓兵防禦', '盾兵防禦', '騎兵防禦', '無'];
 const TRAITS = ['無', '天府', '武曲', '紫微', '廉貞', '巨門', '貪狼', '祿存', '天相', '破軍', '七殺', '天馬', '三台', '左輔', '文昌', '右弼', '天刑', '天鉞'];
 const ADVS = ['0', '1', '2', '3', '4', '5'];
+const WPNLVS = ['0', '1', '2', '3', '4', '5'];
 const ALLOCS = ['自動', '武力', '智力', '統率'];
 // 武將清單以係數表（資料庫）為準：有資料的才能選；頭像只影響顯示不影響可選名單（init 時建立）
 let GENERAL_LIST = [];
@@ -70,6 +71,15 @@ function numInput(value, oninput, placeholder, cls) {
   if (cls) i.className = cls;
   i.addEventListener('input', oninput);
   return i;
+}
+
+// v5.1 進階增益文字：依目前有效等級算出實際增益值（兵書=bookLvEff星；專武=wpnEff階）
+const CURVE_LB = { defPct: '部曲防禦+', counterCoef: '反擊係數', spdSm: '移速差技傷', spdPa: '移速差普攻', teamSm: '全體技傷+' };
+const CURVE_UNIT = { defPct: '%', counterCoef: '', spdSm: '%/點', spdPa: '%/點', teamSm: '%' };
+function advGainTxt(kind, name, lv) {
+  const c = MODEL.CURVES && MODEL.CURVES[kind] && MODEL.CURVES[kind][name];
+  if (!c) return '';
+  return Object.keys(c).map((k) => CURVE_LB[k] + (Math.round((c[k].v0 + c[k].step * lv) * 100) / 100) + CURVE_UNIT[k]).join('；');
 }
 
 function readTeam() {
@@ -156,6 +166,14 @@ function renderTeam() {
     rAdv.appendChild(sel(ALLOCS, s.alloc || '自動', (e) => { s.alloc = e.target.value; refresh(); }));
     card.appendChild(rAdv);
 
+    // v5.1：兵書星級 / 專武進階（白板制度：book=Y 即持有 0星兵書+0階專武；升專武≥1階需武將滿星+兵書滿星）
+    const rBk = el('div', 'row triple');
+    rBk.appendChild(el('label', '', '兵書星'));
+    rBk.appendChild(sel(ADVS, String(s.bookLv || 0), (e) => { s.bookLv = parseInt(e.target.value, 10) || 0; refresh(); }));
+    rBk.appendChild(el('label', '', '專武階'));
+    rBk.appendChild(sel(WPNLVS, String(s.wpnLv === undefined ? 0 : s.wpnLv), (e) => { s.wpnLv = parseInt(e.target.value, 10); refresh(); }));
+    card.appendChild(rBk);
+
     // 星石 ×2 ＋ 額外增傷（收進折疊區）
     const fold = el('details', 'stone-fold');
     const sum = el('summary', '', '星石・額外增傷');
@@ -225,8 +243,11 @@ function updateCardStats(slots) {
     }
     if (!sl) { st.innerHTML = '<span class="dim">未選武將</span>'; return; }
     const advTxt = fmtAdv(sl);
+    const wpnTxt = state[i].book !== 'Y' ? '無' : (sl.wpnEff === 0 && (state[i].wpnLv | 0) > 0 ? '白板(受限)' : sl.wpnEff + '階');
+    const bkTxt = '兵書 <b>' + (state[i].book === 'Y' ? ((sl.bookLvEff || 0) === 0 ? '白板' : (sl.bookLvEff || 0) + '星') : '無') + '</b>｜專武 <b>' + wpnTxt + '</b>';
     st.innerHTML =
-      '<div>適性 <b>' + sl.aff + '</b>（×' + sl.mul + '）｜陣營 ' + sl.fac + '｜進階 <b>' + (sl.adv || 0) + '階</b></div>' +
+      '<div>適性 <b>' + sl.aff + '</b>（×' + sl.mul + '）｜陣營 ' + sl.fac + '｜進階 <b>' + (sl.adv || 0) + '階</b>｜' + bkTxt + '</div>' +
+      (sl.gateNote ? '<div class="dim">⚠ ' + sl.gateNote + '</div>' : '') +
       '<div>發揮 武力 <b>' + sl.wu + '</b>｜智力 <b>' + sl.zhi + '</b></div>' +
       (advTxt ? '<div class="advline">' + advTxt + '</div>' : '') +
       (sl.defP ? '<div>星石防禦合計 <b>' + Math.round(sl.defP * 1000) / 10 + '%</b>（不計入傷害）</div>' : '') +
@@ -274,15 +295,17 @@ function renderSummary(r, team) {
   const mt = document.getElementById('memberTable');
   mt.innerHTML = '';
   const tb = el('table', 'member');
-  tb.innerHTML = '<tr><th>位置</th><th>武將</th><th>進階</th><th>兵書</th><th>兵種</th><th>技能</th><th>快照傷害</th><th>快照治療</th><th>普攻/擊</th><th>增益窗口</th><th>易傷窗口</th><th>防禦增益／不屈</th><th>護盾</th></tr>';
+  tb.innerHTML = '<tr><th>位置</th><th>武將</th><th>進階</th><th>兵書</th><th>兵書增益</th><th>專武增益</th><th>兵種</th><th>技能</th><th>快照傷害</th><th>快照治療</th><th>普攻/擊</th><th>增益窗口</th><th>易傷窗口</th><th>防禦增益／不屈</th><th>護盾</th></tr>';
   r.slots.forEach((sl, i) => {
     if (!sl) return;
     const tr = el('tr');
     const heal = Math.round(sl.c.heal + sl._snap * sl.c.ls);
     const defProfile = genDefProfile(sl);
     const shieldVal = genShieldVal(sl);
+    const bkGain = sl.book === 'Y' ? (advGainTxt('book', sl.name, sl.bookLvEff || 0) || '—') : '無';
+    const wpnGain = sl.book === 'Y' ? (sl.wpnEff > 0 ? (advGainTxt('wpn', sl.name, sl.wpnEff) || '—') : '白板') : '無';
     tr.innerHTML = '<td>' + ['主將', '副將', '副將'][i] + '</td><td>' + sl.name + '</td><td>' + (sl.adv || 0) +
-      '</td><td>' + sl.book + '</td><td>' + sl.troop + sl.tier.replace('階', '') + '</td><td>' + sl.c.skill + '</td><td>' + sl._snap +
+      '</td><td>' + sl.book + '</td><td class="tl-bk">' + bkGain + '</td><td class="tl-bk">' + wpnGain + '</td><td>' + sl.troop + sl.tier.replace('階', '') + '</td><td>' + sl.c.skill + '</td><td>' + sl._snap +
       '</td><td>' + heal + '</td><td>' + sl.na + '</td><td>' + sl.c.bfx + '</td><td>' + (sl.c.vfx || '—') + '</td>' +
       '<td class="tl-def">' + (defProfile || '—') + '</td><td class="tl-shield">' + (shieldVal || '—') + '</td>';
     tb.appendChild(tr);
@@ -757,6 +780,36 @@ function renderGallery() {
         tb.appendChild(tr);
       });
       det.appendChild(tb);
+    }
+    // v5.1 兵書/專武完整成長路線（箭嘴顯示 白板→5級，資料：Excel 進階曲線分頁）
+    const advDet = DATA.advDetail && DATA.advDetail[name];
+    if (advDet) {
+      const kinds = [['book', '兵書成長（白板0星 → 5星）'], ['wpn', '專武成長（白板0階 → 5階）']];
+      kinds.forEach(([kind, title]) => {
+        const list = advDet[kind];
+        if (!list || !list.length) {
+          det.appendChild(el('div', 'g-sec-title', title));
+          det.appendChild(el('div', 'g-curve-pending', '※ 待補充（兵書尚未抽到／未收錄進階數值）'));
+          return;
+        }
+        det.appendChild(el('div', 'g-sec-title', title));
+        const bySkill = {};
+        list.forEach((e) => { (bySkill[e.skill] = bySkill[e.skill] || []).push(e); });
+        Object.keys(bySkill).forEach((sk) => {
+          if (sk) det.appendChild(el('div', 'g-curve-skill', sk));
+          bySkill[sk].forEach((e) => {
+            const line = el('div', 'g-curve-line');
+            line.appendChild(el('span', 'g-curve-fx', e.effect));
+            line.appendChild(el('span', 'g-curve-val',
+              e.vals.map((v) => Math.round(v * 100) / 100).join(' → ') + (e.unit || '')));
+            det.appendChild(line);
+          });
+        });
+      });
+    } else if ((DATA.skills[name] || []).some((sk) => (sk.type || '').indexOf('專武') >= 0)) {
+      // 有專武但進階曲線未收錄：標示待補，避免以為顯示異常
+      det.appendChild(el('div', 'g-sec-title', '兵書／專武成長'));
+      det.appendChild(el('div', 'g-curve-pending', '※ 此武將的兵書／專武進階數值尚未收錄（需要遊戲內進階預覽截圖補充），目前僅有基礎值，見上方技能描述。'));
     }
     if (!DATA.coef[name]) {
       det.appendChild(el('div', 'dim g-note', '※ 試算器尚未收錄此武將（S2新武將，屬性數值待補）'));
