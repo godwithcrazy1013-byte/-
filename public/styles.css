@@ -398,8 +398,32 @@ td.tl-shield { color: var(--gold); white-space: normal; }
   .sum-card { min-width: 0; padding: 8px 6px; }
   .sum-v { font-size: 18px; }
 
-  /* 表格類：時間軸/成員表在直向改卡片式，欄位全可見（只套這兩張，對打/圖鑑表維持橫滑） */
+  /* 窄視窗（桌面側欄）：表格維持橫滑 */
   table { font-size: 12px; }
+  .timeline-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .summary h2, .timeline-wrap h2 { font-size: 15px; margin: 14px 0 8px; }
+
+  /* 圖鑑列：頭像與資料上下堆疊 */
+  .g-row { gap: 6px; padding: 8px; }
+  .g-row > * { min-width: 0; }
+  .g-lead-btn { margin-left: 0; padding: 6px 10px; font-size: 12px; }
+  .g-aff { white-space: normal; }
+  .g-curve-line { flex-wrap: wrap; gap: 4px 8px; }
+  .g-curve-fx { flex: 0 0 100%; }
+
+  /* S2 頁 */
+  .s2-grid { grid-template-columns: 1fr; }
+}
+
+/* 小螢幕再收斂（≤420px） */
+@media (max-width: 420px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+  .presets { grid-template-columns: 1fr 1fr; }
+  header h1 { font-size: 16px; }
+}
+
+/* ===== 觸控手機：時間軸/成員表卡片化（僅 coarse pointer，桌面側欄維持表格） ===== */
+@media (max-width: 768px) and (pointer: coarse) {
   .timeline-scroll { overflow-x: visible; -webkit-overflow-scrolling: auto; }
   #timeline, #timeline tbody, #timeline tr, #timeline td,
   #memberTable table.member, #memberTable table.member tbody, #memberTable table.member tr, #memberTable table.member td {
@@ -421,23 +445,4 @@ td.tl-shield { color: var(--gold); white-space: normal; }
   #timeline td.actor img { width: 20px; height: 20px; vertical-align: -4px; }
   #timeline td.skill { flex-wrap: wrap; }
   #timeline td.skill .fx-sub { flex: 0 0 100%; text-align: left; margin-top: 2px; }
-  .summary h2, .timeline-wrap h2 { font-size: 15px; margin: 14px 0 8px; }
-
-  /* 圖鑑列：頭像與資料上下堆疊 */
-  .g-row { gap: 6px; padding: 8px; }
-  .g-row > * { min-width: 0; }
-  .g-lead-btn { margin-left: 0; padding: 6px 10px; font-size: 12px; }
-  .g-aff { white-space: normal; }
-  .g-curve-line { flex-wrap: wrap; gap: 4px 8px; }
-  .g-curve-fx { flex: 0 0 100%; }
-
-  /* S2 頁 */
-  .s2-grid { grid-template-columns: 1fr; }
-}
-
-/* 小螢幕再收斂（≤420px） */
-@media (max-width: 420px) {
-  .cards { grid-template-columns: 1fr 1fr; }
-  .presets { grid-template-columns: 1fr 1fr; }
-  header h1 { font-size: 16px; }
 }
