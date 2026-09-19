@@ -1,4 +1,7 @@
 // 策定九州傷害模型 v5.0（與 Excel 試算器 v4.2/行動時間軸 v6 公式一致；Node 與瀏覽器共用）
+// v5.1（2026-09-19）：S2新武將入模——司馬懿（星流霆擊245+隱忍DOT300+貫門雙龍係數+100；三馬同槽防禦79%常駐）、
+//       龐統（索命連環240+鐵索二段100；佻身飛蛾39%×3層常駦；泣麟悲鳳：主將智力最高時主將技能期望×1.26）；
+//       兩將被動滿級值=1級→2級線性外推（S2截圖僅有下一等級預覽），待滿級效果截圖驗證；屬性=21級裸+係數×29（滿級50）
 // v5.1（用戶 2026-09-18 20:03 指正）：白板制度——兵書0星=白板兵書（基礎效果常駐，非無兵書）；
 //       專武0階=白板專武（book=Y 即自動持有 0階兵書+0階專武，基礎值=v0 常駐）。
 //       ①slot 新增 bookLv(兵書星0-5,預設0)、wpnLv(專武進階0-5,預設0)。曲線 v(lv)=v0+lv×step。
@@ -78,6 +81,10 @@
   //     張寶係數54→67/張梁普攻50→61/廖化武力最高技傷8→10/關興普攻40→52/張苞技傷72→80/孟獲不屈15.4→19.1+係數26→29.8/甘寧泥潭增傷120→140
   //   專武：荀攸/程昱/荀彧/糜竺(技傷+防禦)、曹丕反擊後防禦、徐晃三項、孟獲虛弱、張燕三項、張寶三項、張梁係數21→31、
   //     廖化兩項、關興三項、張苞普攻+固定+1命中、張星彩兩項、孫堅兩項、黃蓋兩項、程普兩項、甘寧防禦26→38、王平兩項
+  //   v5.1 S2：司馬懿兵書畢力遐方（隱忍傷害1.1→1.6%/層×14、部曲防禦25→37）、
+  //     司馬懿專武玄冥天罡扇（額外隱忍機率7→11%、每跳隱忍後防禦1.8→2.6%×15層）、
+  //     龐統兵書鳳鳴鵲唳（自身技傷16→23、部曲防禦24→35、鐵索二段53→78、泥澤移速-5%）、
+  //     龐統專武靈霄碧霞棍（技傷30→40、防禦39→57、潰敗追傷3→4%上限39000→57200）
   const CURVES = {
     wpn: {
       '張飛': { defPct: { v0: 20, step: 9.3 } },              // 丈八蛇矛：每命中部曲+防禦%（0階20/1階29.3）
@@ -179,9 +186,9 @@
   //   rate: 觸發機率（期望値近似，如程普25%、關銀屏35%）
   //   book: true 表示專武裝備效果，僅 slot.book==='Y' 時啟用；護盾 bookCoef=專武後係數
   // 已收錄（Lv10 文案值）；未收錄（數值不明/過度情境化，待補）：于吉道心澤世（每10統率+0.9%）、
-  //   司馬懿三馬同槽/畢力遐方/玄冥天罡扇（無具體%）、龐統佻身飛鏃/鳳鳴鶴唳（無具體%）、
   //   關羽青龍偃月刀（按武力差動態）、諸葛亮神機扇（按智力差動態）、呂布方天畫戟（每秒疊加至330%）、
   //   徐晃風掣雷行/典韋冷月追魂戟（按移速差動態）、周瑜鐵劍（按燃燒數）、小喬顧曲唱和（按擊潰數）
+  // v5.1 已收錄未接入（見 CURVES 註解與 Excel「進階曲線」分頁）：司馬懿畢力遐方/玄冥天罡扇、龐統鳳鳴鵲唳/靈霄碧霞棍
   const DEFSYS = {
     '張飛': [
       { kind: 'def', skill: '據水斷橋', pct: 160, attr: 'wu', dur: 5, trigger: 'na', maxStack: 3, decayAfter: 1 }, // 2層起衰減70%（層2,3僅30%效果）
@@ -300,6 +307,13 @@
     ],
     '孟獲': [
       { kind: 'def', skill: '憑河暴虎', pct: 30, attr: 'tong', dur: 5, trigger: 'cast' },   // 每命中1部曲+30%，v1視同命中1
+    ],
+    // v5.1 S2新武將（被動滿級值=1級→2級線性外推，待滿級效果截圖驗證）：
+    '司馬懿': [
+      { kind: 'def', skill: '三馬同槽', pct: 79, attr: 'zhi', dur: 99, trigger: 'constant' }, // 部曲防禦提升（1級7%→2級15%推估滿級79%，受智力影響）；<50%額外+21%未計
+    ],
+    '龐統': [
+      { kind: 'def', skill: '佻身飛蛾', pct: 117, attr: 'zhi', dur: 99, trigger: 'constant' }, // 每次鐵索+39%×3層（1級3%→2級7%推估滿級39%每層，受智力影響），滿層常駐化近似
     ],
   };
 
@@ -454,6 +468,10 @@
     const zhuge = slot.name === '諸葛亮'
       ? 3.6 * Math.max(0, slot.zhi - ctx.enemyInt) * (slot.book === 'Y' ? 1.154 : 1) * (1 + (slot.adv >= 5 ? 0.1 : 0))
       : 0;
+    // v5.1 司馬懿【貫門雙龍】：自身技能傷害係數+100（Lv10線性外推 1級+10→2級+20；<50%額外+40未計）
+    const sima = slot.name === '司馬懿' ? 100 : 0;
+    // v5.1 龐統【泣麟悲鳳】：隊伍含龐統且主將(0號槽)為智力最高時，主將主動期望暴擊 +0.8×32.5%（文案值，未乘ATTR_MUL，保守）
+    const ptCrit = ctx.ptCrit || 1;
     let sm = slot.c.sm + av.sm + slot.spdSmEff + (slot.bookSm || 0);   // v5.0：+兵書全體技傷(徐晃系)
     if (t !== null && slot.name === '呂布') {
       sm = (slot.book === 'N' ? 0 : Math.min(0.022 * t, 0.95)) + (t >= 3 * (i + 1) + 9 ? 0.5 : 0);
@@ -464,9 +482,9 @@
     // v4.9 諸葛亮【八卦陣】：主動技能7.7%機率下一秒再釋放一次 → 期望+7.7%技能傷害
     const bg = slot.name === '諸葛亮' ? 1.077 : 1;
     return Math.round(
-      (base + slot.c.dot + zhuge) * inner
+      (base + slot.c.dot + zhuge + sima) * inner
       * (1 + av.xprob) * (1 + ctx.tgtPer * av.tgt)
-      * ctx.vuln * (1 + ctx.facB) * ctx.targetCorr * bg
+      * ctx.vuln * (1 + ctx.facB) * ctx.targetCorr * bg * ptCrit
     );
   }
 
@@ -496,7 +514,9 @@
       grid[0][r] + grid[1][r] + grid[2][r] + teamSm + (r === argZ ? intlSm : 0) + (r === argW ? wulSm : 0));
 
     const vulnAll = slots.reduce((p, s) => p * (1 + (s.c.vjp + s.av.vp) * s.c.vk), 1);
-    const snap = slots.map((s, i) => dmg(s, i, null, { buff: recv[i], vuln: vulnAll, facB, targetCorr, enemyInt, tgtPer }));
+    // v5.1 龐統【泣麟悲鳳】：隊伍含龐統且主將(0號槽)為智力最高 → 主將主動技能期望傷害×(1+0.8×0.325)
+    const ptCrit = slots.some((s) => s.name === '龐統') && argZ === 0 ? 1 + 0.8 * 0.325 : 1;
+    const snap = slots.map((s, i) => dmg(s, i, null, { buff: recv[i], vuln: vulnAll, facB, targetCorr, enemyInt, tgtPer, ptCrit }));
 
     const ticks = [];
     for (let i = 0; i < 30; i++) {
@@ -507,7 +527,7 @@
         + teamSm + (m === argZ ? intlSm : 0) + (m === argW ? wulSm : 0);
       let vm = 1;
       for (let s = 0; s < 3; s++) vm *= (1 + (slots[s].c.vjp + slots[s].av.vp) * slots[s].c.vk * gV(s));
-      const d = dmg(slots[m], m, t, { buff, vuln: vm, facB, targetCorr, enemyInt, tgtPer });
+      const d = dmg(slots[m], m, t, { buff, vuln: vm, facB, targetCorr, enemyInt, tgtPer, ptCrit });
       const heal = Math.round(slots[m].c.heal + d * (slots[m].c.ls + slots[m].av.ls)); // v4.2：+進階倒戈ls
       ticks.push({ i: i + 1, t, m, dmg: d, heal });
     }

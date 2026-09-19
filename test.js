@@ -201,3 +201,27 @@ console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
   console.log(g4 ? 'PASS' : 'FAIL', 'v5.0徐晃兵書 H17 ' + r4a.h17 + '→' + r4b.h17);
   ok = ok && ok5;
 })();
+// ---------- v5.1 S2新武將（司馬懿/龐統） ----------
+(function () {
+  // 1) 司馬懿隊：compute 不報錯、有技能傷害、三馬同槽常駐防禦生效（defPct>0）
+  const t1 = [slot('司馬懿', '弓兵'), slot('郭嘉', '弓兵'), slot('曹操', '弓兵')];
+  const r1 = MODEL.compute(t1, 250, 1);
+  const g1 = r1.cum90 > 0 && r1.ticks[0].defPct > 100 && r1.slots[0].zhi === 282; // 235×1.2=282
+  // 2) 龐統主將智力最高 → 泣麟悲鳳暴擊生效（h17 高於同隊無龐統對照）
+  const r2 = MODEL.compute([slot('龐統', '弓兵'), slot('關銀屏', '弓兵'), slot('馬超', '弓兵')], 250, 1);
+  const r3 = MODEL.compute([slot('公孫瓚', '弓兵'), slot('關銀屏', '弓兵'), slot('馬超', '弓兵')], 250, 1);
+  const g2 = r2.h17 > r3.h17 * 1.2 && r2.cum90 > 0;
+  // 3) 龐統在隊但主將非智力最高（諸葛亮主將）→ 暴擊不套用到主將（h17 不高於無龐統同編成對照）
+  const r4 = MODEL.compute([slot('諸葛亮', '弓兵'), slot('龐統', '弓兵'), slot('黃月英', '弓兵')], 250, 1);
+  const r5 = MODEL.compute([slot('諸葛亮', '弓兵'), slot('法正', '弓兵'), slot('黃月英', '弓兵')], 250, 1);
+  const g3 = r4.h17 < r5.h17 * 1.05;
+  // 4) battle() 對打煙霧：司馬懿隊 vs 桃園盾可跑完
+  const b = MODEL.battle(t1, 250, 1, {}, { names: ['劉備', '張飛', '關羽'], troop: '盾兵', adv: 0 });
+  const g4 = b.ticksUsed >= 1 && b.log.length === b.ticksUsed;
+  const okS2 = g1 && g2 && g3 && g4;
+  console.log(g1 ? 'PASS' : 'FAIL', 'v5.1司馬懿隊 cum90=' + r1.cum90 + ' def t1=' + r1.ticks[0].defPct + ' zhi=' + r1.slots[0].zhi);
+  console.log(g2 ? 'PASS' : 'FAIL', 'v5.1龐統暴擊 h17 ' + r3.h17 + '→' + r2.h17);
+  console.log(g3 ? 'PASS' : 'FAIL', 'v5.1龐統非智力最高主將不暴擊 ' + r4.h17 + ' vs 法正版 ' + r5.h17);
+  console.log(g4 ? 'PASS' : 'FAIL', 'v5.1 battle 對打 winner=' + b.winner + ' time=' + b.time);
+  ok = ok && okS2;
+})();
