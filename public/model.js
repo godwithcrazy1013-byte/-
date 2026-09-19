@@ -38,6 +38,9 @@
 //       護盾（張角斗轉參橫）先吸收傷害再扣兵；實測護盾10974=400×智力/10（≈274智，不乘1.81；該場無專武）
 // v5.1.5：張角專武護盾「係數提升48%▶70%」經用戶截圖確認為乘算（0階400×1.48=592，滿階×2.58）；
 //         舊模型 bookCoef=470 係誤讀 flat+70，已改 CURVES.wpn.張角.shieldPct(48+22×階) 乘算接入
+// v5.1.6：①黃月英滿級裸智力 250→200（用戶截圖成長係數+2.56/級反推：138.56+2.56×24=200；舊250源自錯誤圖鑑）
+//         ②加點自訂分配：alloc=自訂 + ptsW/ptsZ（合計≤進階屬性點，溢出截斷）；統率加點明示「不加武/智」
+//         ③暴擊/buff歸屬以「發揮智力」排名判定（面板顯示部曲#1👑），供玩家微調「剛好比隊友低」
 //       注意：本模型既有傷害數值由台服戰報「損兵數」校準，39.8 在「模型傷害↔損兵」間自相抵消，
 //             故整合僅加 (1+D) 除法層與護盾層，不再把所有數字÷39.8
 //       已知簡化：張飛不屈層數=每 tick 1 層（實為敵方3將普攻，5秒窗口至多2層）、
@@ -125,7 +128,7 @@
   function defaultSlot(name) {
     return {
       name: name || '', book: 'Y', bookLv: 0, wpnLv: 0, troop: '騎兵', tier: '5階',
-      adv: 0, alloc: '自動',
+      adv: 0, alloc: '自動', ptsW: '', ptsZ: '',   // v5.1.6：自訂加點（武力點/智力點，僅 alloc=自訂 時生效，合計上限=進階屬性點）
       s1: { attr: '無', val: '', def: '無', defP: '', trait: '無', traitP: '' },
       s2: { attr: '無', val: '', def: '無', defP: '', trait: '無', traitP: '' },
       extra: '',
@@ -423,10 +426,18 @@
       const av = getAdv(s.name, s.adv);
       const mul = affMul(a[s.troop]);
       const add = (st) => (s.s1.attr === st ? num(s.s1.val) : 0) + (s.s2.attr === st ? num(s.s2.val) : 0);
-      // 加點屬性：自動=主屬性（裸智力≥裸武力→智力）
+      // 加點屬性：自動=主屬性（裸智力≥裸武力→智力）；自訂=玩家自行分配武/智點數（v5.1.6，用戶2026-09-19指正加點可自由分配）
       const autoAttr = at.zhi >= at.wu ? '智力' : '武力';
-      const alloc = s.alloc === '自動' || !s.alloc ? autoAttr : s.alloc;
+      const alloc = (!s.alloc || s.alloc === '自動') ? autoAttr : s.alloc;
       const pts = av.pts;
+      let ptsW = 0, ptsZ = 0, allocNote = '';
+      if (alloc === '武力') ptsW = pts;
+      else if (alloc === '智力') ptsZ = pts;
+      else if (alloc === '統率') allocNote = '統率不加武/智（模型未計統率），此將屬性點閒置';
+      else if (alloc === '自訂') {
+        ptsZ = Math.min(Math.max(0, num(s.ptsZ)), pts);
+        ptsW = Math.min(Math.max(0, num(s.ptsW)), pts - ptsZ);
+      } else ptsZ = pts;
       const spdSmEff = av.spdSm * spdDiff;            // v4.2：移速差→技能傷害
       const chase = chaseOf(s.name);                  // v4.3：追擊（額外普攻期望）
       // ---------- v5.0：兵書星級 / 專武進階 ----------
@@ -444,12 +455,12 @@
       const bkSpdPa = bCurve && bCurve.spdPa ? (bCurve.spdPa.v0 + bCurve.spdPa.step * bkLv) / 100 : 0;
       const bkTeamSm = bCurve && bCurve.teamSm ? (bCurve.teamSm.v0 + bCurve.teamSm.step * bkLv) / 100 : 0;
       return Object.assign({}, s, {
-        c, fac: a.fac, mul, aff: a[s.troop], av, alloc, spdSmEff: spdSmEff + bkSpdSm * spdDiff,
+        c, fac: a.fac, mul, aff: a[s.troop], av, alloc, allocNote, ptsW, ptsZ, spdSmEff: spdSmEff + bkSpdSm * spdDiff,
         wpnEff: wpn.lv, gateNote: wpn.note,
         bookSm: bkTeamSm, bookSpdSm: bkSpdSm, bookSpdPa: bkSpdPa, bookLvEff: bkLv,
         chase, chaseMult: chase ? chase.mult : 1, counter,
-        wu: round1(at.wu * mul + add('武力') + (alloc === '武力' ? pts : 0)),
-        zhi: round1(at.zhi * mul + add('智力') + (alloc === '智力' ? pts : 0)),
+        wu: round1(at.wu * mul + add('武力') + ptsW),
+        zhi: round1(at.zhi * mul + add('智力') + ptsZ),
         defP: num(s.s1.defP) + num(s.s2.defP),
         // 滿兵每擊普攻（v5模型；兵力衰減由 battle() 依剩餘兵力動態乘）
         // v4.7：paWin=「主動後普攻增傷窗口」常駐近似（威震三軍+275%/9秒、冷卻9秒→覆蓋率≈100%）

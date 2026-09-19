@@ -9,7 +9,7 @@ const DEFS = ['弓兵防禦', '盾兵防禦', '騎兵防禦', '無'];
 const TRAITS = ['無', '天府', '武曲', '紫微', '廉貞', '巨門', '貪狼', '祿存', '天相', '破軍', '七殺', '天馬', '三台', '左輔', '文昌', '右弼', '天刑', '天鉞'];
 const ADVS = ['0', '1', '2', '3', '4', '5'];
 const WPNLVS = ['0', '1', '2', '3', '4', '5'];
-const ALLOCS = ['自動', '武力', '智力', '統率'];
+const ALLOCS = ['自動', '武力', '智力', '統率', '自訂'];
 // 武將清單以係數表（資料庫）為準：有資料的才能選；頭像只影響顯示不影響可選名單（init 時建立）
 let GENERAL_LIST = [];
 
@@ -166,6 +166,15 @@ function renderTeam() {
     rAdv.appendChild(sel(ALLOCS, s.alloc || '自動', (e) => { s.alloc = e.target.value; refresh(); }));
     card.appendChild(rAdv);
 
+    // v5.1.6：自訂加點（武/智點數自由分配，合計上限=進階屬性點）
+    if ((s.alloc || '自動') === '自訂') {
+      const rC = el('div', 'row triple');
+      rC.appendChild(el('label', '', '點數'));
+      rC.appendChild(numInput(s.ptsW, (e) => { s.ptsW = e.target.value; refresh(); }, '武力'));
+      rC.appendChild(numInput(s.ptsZ, (e) => { s.ptsZ = e.target.value; refresh(); }, '智力'));
+      card.appendChild(rC);
+    }
+
     // v5.1：兵書星級 / 專武進階（白板制度：book=Y 即持有 0星兵書+0階專武；升專武≥1階需武將滿星+兵書滿星）
     const rBk = el('div', 'row triple');
     rBk.appendChild(el('label', '', '兵書星'));
@@ -230,6 +239,9 @@ function fmtAdv(sl) {
 
 function updateCardStats(slots) {
   const cards = document.querySelectorAll('#team .card');
+  const wuArr = slots.filter(Boolean).map((s) => s.wu);
+  const zhiArr = slots.filter(Boolean).map((s) => s.zhi);
+  const rankOf = (v, arr) => 1 + arr.filter((x) => x > v).length;
   slots.forEach((sl, i) => {
     const card = cards[i];
     if (!card) return;
@@ -245,10 +257,12 @@ function updateCardStats(slots) {
     const advTxt = fmtAdv(sl);
     const wpnTxt = state[i].book !== 'Y' ? '無' : (sl.wpnEff === 0 && (state[i].wpnLv | 0) > 0 ? '白板(受限)' : sl.wpnEff + '階');
     const bkTxt = '兵書 <b>' + (state[i].book === 'Y' ? ((sl.bookLvEff || 0) === 0 ? '白板' : (sl.bookLvEff || 0) + '星') : '無') + '</b>｜專武 <b>' + wpnTxt + '</b>';
+    const wR = rankOf(sl.wu, wuArr), zR = rankOf(sl.zhi, zhiArr);
     st.innerHTML =
       '<div>適性 <b>' + sl.aff + '</b>（×' + sl.mul + '）｜陣營 ' + sl.fac + '｜進階 <b>' + (sl.adv || 0) + '階</b>｜' + bkTxt + '</div>' +
       (sl.gateNote ? '<div class="dim">⚠ ' + sl.gateNote + '</div>' : '') +
-      '<div>發揮 武力 <b>' + sl.wu + '</b>｜智力 <b>' + sl.zhi + '</b></div>' +
+      '<div>發揮 武力 <b>' + sl.wu + '</b>' + (wR === 1 ? '👑' : '<span class="dim">#' + wR + '</span>') + '｜智力 <b>' + sl.zhi + '</b>' + (zR === 1 ? '👑<span class="dim">（智力最高）</span>' : '<span class="dim">#' + zR + '</span>') + '</div>' +
+      (sl.allocNote ? '<div class="dim">⚠ ' + sl.allocNote + '</div>' : '') +
       (advTxt ? '<div class="advline">' + advTxt + '</div>' : '') +
       (sl.defP ? '<div>星石防禦合計 <b>' + Math.round(sl.defP * 1000) / 10 + '%</b>（不計入傷害）</div>' : '') +
       '<div>單發快照 <b>' + sl._snap + '</b>｜普攻 <b>' + sl.na + '</b>/擊</div>';
