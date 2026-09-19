@@ -128,7 +128,7 @@
   function defaultSlot(name) {
     return {
       name: name || '', book: 'Y', bookLv: 0, wpnLv: 0, troop: '騎兵', tier: '5階',
-      adv: 0, alloc: '自動', ptsW: '', ptsZ: '',   // v5.1.6：自訂加點（武力點/智力點，僅 alloc=自訂 時生效，合計上限=進階屬性點）
+      adv: 0, alloc: '自動', ptsW: '', ptsZ: '', ptsT: '',   // v5.1.7/5.1.8：配點填空（武/智/統，任一非空=自訂，合計上限=進階屬性點）
       s1: { attr: '無', val: '', def: '無', defP: '', trait: '無', traitP: '' },
       s2: { attr: '無', val: '', def: '無', defP: '', trait: '無', traitP: '' },
       extra: '',
@@ -426,20 +426,22 @@
       const av = getAdv(s.name, s.adv);
       const mul = affMul(a[s.troop]);
       const add = (st) => (s.s1.attr === st ? num(s.s1.val) : 0) + (s.s2.attr === st ? num(s.s2.val) : 0);
-      // 加點屬性：自動=主屬性（裸智力≥裸武力→智力）；配點填空=武/智輸入框任一非空即自訂（v5.1.7 常駐填空，留白依下拉）
+      // 加點屬性：自動=主屬性（裸智力≥裸武力→智力）；配點填空=武/智/統輸入框任一非空即自訂（v5.1.8 加統率，留白依下拉）
       const autoAttr = at.zhi >= at.wu ? '智力' : '武力';
       let alloc = (!s.alloc || s.alloc === '自動') ? autoAttr : s.alloc;
       const pts = av.pts;
-      let ptsW = 0, ptsZ = 0, allocNote = '';
+      let ptsW = 0, ptsZ = 0, ptsT = 0, allocNote = '';
       const customW = String(s.ptsW == null ? '' : s.ptsW).trim() !== '' ? num(s.ptsW) : null;
       const customZ = String(s.ptsZ == null ? '' : s.ptsZ).trim() !== '' ? num(s.ptsZ) : null;
-      if (customW !== null || customZ !== null) {          // 填空優先
+      const customT = String(s.ptsT == null ? '' : s.ptsT).trim() !== '' ? num(s.ptsT) : null;
+      if (customW !== null || customZ !== null || customT !== null) {   // 填空優先：智→武→統依序截斷
         alloc = '自訂';
         ptsZ = Math.min(Math.max(0, customZ || 0), pts);
         ptsW = Math.min(Math.max(0, customW || 0), pts - ptsZ);
+        ptsT = Math.min(Math.max(0, customT || 0), pts - ptsZ - ptsW);
       } else if (alloc === '武力') ptsW = pts;
       else if (alloc === '智力') ptsZ = pts;
-      else if (alloc === '統率') allocNote = '統率不加武/智（模型未計統率），此將屬性點閒置';
+      else if (alloc === '統率') { ptsT = pts; allocNote = '統率型武將（劉備/曹操等）建議用配點微調；模型公式暫未計統率加成（技能為校準定值）'; }
       else { alloc = autoAttr; if (alloc === '武力') ptsW = pts; else ptsZ = pts; }   // 自動／舊檔自訂留白→自動
       const spdSmEff = av.spdSm * spdDiff;            // v4.2：移速差→技能傷害
       const chase = chaseOf(s.name);                  // v4.3：追擊（額外普攻期望）
@@ -458,12 +460,13 @@
       const bkSpdPa = bCurve && bCurve.spdPa ? (bCurve.spdPa.v0 + bCurve.spdPa.step * bkLv) / 100 : 0;
       const bkTeamSm = bCurve && bCurve.teamSm ? (bCurve.teamSm.v0 + bCurve.teamSm.step * bkLv) / 100 : 0;
       return Object.assign({}, s, {
-        c, fac: a.fac, mul, aff: a[s.troop], av, alloc, allocNote, ptsW, ptsZ, spdSmEff: spdSmEff + bkSpdSm * spdDiff,
+        c, fac: a.fac, mul, aff: a[s.troop], av, alloc, allocNote, ptsW, ptsZ, ptsT, spdSmEff: spdSmEff + bkSpdSm * spdDiff,
         wpnEff: wpn.lv, gateNote: wpn.note,
         bookSm: bkTeamSm, bookSpdSm: bkSpdSm, bookSpdPa: bkSpdPa, bookLvEff: bkLv,
         chase, chaseMult: chase ? chase.mult : 1, counter,
         wu: round1(at.wu * mul + add('武力') + ptsW),
         zhi: round1(at.zhi * mul + add('智力') + ptsZ),
+        tong: round1((at.tong || 0) * mul + ptsT),   // v5.1.8：統率（展示/配點歸屬；公式未計統率加成）
         defP: num(s.s1.defP) + num(s.s2.defP),
         // 滿兵每擊普攻（v5模型；兵力衰減由 battle() 依剩餘兵力動態乘）
         // v4.7：paWin=「主動後普攻增傷窗口」常駐近似（威震三軍+275%/9秒、冷卻9秒→覆蓋率≈100%）

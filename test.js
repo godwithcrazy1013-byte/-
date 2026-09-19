@@ -271,3 +271,24 @@ console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
   ok = ok && (g1 && g2);
   console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
 })();
+// ---------- v5.1.8 統率資料 + 三向配點 ----------
+(function () {
+  // 1) 統率裸值入庫：劉備240/曹操288（Excel滿級裸屬性匯入，51將齊）
+  const g1 = DATA.attrs['劉備'].tong === 240 && DATA.attrs['曹操'].tong === 288 &&
+    Object.keys(DATA.attrs).every((n) => DATA.attrs[n].tong > 0);
+  console.log(g1 ? 'PASS' : 'FAIL', 'v5.1.8統率入庫 劉備' + DATA.attrs['劉備'].tong + '/曹操' + DATA.attrs['曹操'].tong);
+  // 2) 三向截斷（智→武→統）：adv5共50點，填 智30/武30/統30 → 30/20/0
+  const s1 = slot('劉備', '盾兵'); s1.adv = 5; s1.ptsZ = 30; s1.ptsW = 30; s1.ptsT = 30;
+  const r1 = MODEL.compute([s1, slot('張飛', '盾兵'), slot('關羽', '盾兵')], 250, 1);
+  const lb = r1.slots[0];
+  const g2 = lb.alloc === '自訂' && lb.ptsZ === 30 && lb.ptsW === 20 && lb.ptsT === 0 &&
+    lb.zhi === Math.round((207.5 * 1.2 + 30) * 10) / 10 && lb.tong === Math.round((240 * 1.2 + 0) * 10) / 10;
+  console.log(g2 ? 'PASS' : 'FAIL', 'v5.1.8三向截斷 智' + lb.ptsZ + '/武' + lb.ptsW + '/統' + lb.ptsT + ' 發揮統率' + lb.tong);
+  // 3) 劉備 adv5 下拉選統率 → 50點全進統率（338），武智不加
+  const s2 = slot('劉備', '盾兵'); s2.adv = 5; s2.alloc = '統率';
+  const r2 = MODEL.compute([s2, slot('張飛', '盾兵'), slot('關羽', '盾兵')], 250, 1);
+  const g3 = r2.slots[0].ptsT === 50 && r2.slots[0].tong === 338 && !!r2.slots[0].allocNote;
+  console.log(g3 ? 'PASS' : 'FAIL', 'v5.1.8統率下拉全配 ptsT=' + r2.slots[0].ptsT + ' 統率' + r2.slots[0].tong);
+  ok = ok && (g1 && g2 && g3);
+  console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
+})();

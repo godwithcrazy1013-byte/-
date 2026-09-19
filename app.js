@@ -166,11 +166,12 @@ function renderTeam() {
     rAdv.appendChild(sel(ALLOCS, s.alloc || '自動', (e) => { s.alloc = e.target.value; refresh(); }));
     card.appendChild(rAdv);
 
-    // v5.1.7：配點填空（常駐）——武力/智力點數任一非空即自訂分配（覆蓋下拉），留白依下拉的加點方式
+    // v5.1.8：配點填空（常駐）——武力/智力/統率點數任一非空即自訂分配（覆蓋下拉），留白依下拉的加點方式
     const rPts = el('div', 'row triple');
     rPts.appendChild(el('label', '', '配點'));
     rPts.appendChild(numInput(s.ptsW, (e) => { s.ptsW = e.target.value; refresh(); }, '武力點'));
     rPts.appendChild(numInput(s.ptsZ, (e) => { s.ptsZ = e.target.value; refresh(); }, '智力點'));
+    rPts.appendChild(numInput(s.ptsT, (e) => { s.ptsT = e.target.value; refresh(); }, '統率點'));
     card.appendChild(rPts);
 
     // v5.1：兵書星級 / 專武進階（白板制度：book=Y 即持有 0星兵書+0階專武；升專武≥1階需武將滿星+兵書滿星）
@@ -259,9 +260,9 @@ function updateCardStats(slots) {
     st.innerHTML =
       '<div>適性 <b>' + sl.aff + '</b>（×' + sl.mul + '）｜陣營 ' + sl.fac + '｜進階 <b>' + (sl.adv || 0) + '階</b>｜' + bkTxt + '</div>' +
       (sl.gateNote ? '<div class="dim">⚠ ' + sl.gateNote + '</div>' : '') +
-      '<div>發揮 武力 <b>' + sl.wu + '</b>' + (wR === 1 ? '👑' : '<span class="dim">#' + wR + '</span>') + '｜智力 <b>' + sl.zhi + '</b>' + (zR === 1 ? '👑<span class="dim">（智力最高）</span>' : '<span class="dim">#' + zR + '</span>') + '</div>' +
+      '<div>發揮 武力 <b>' + sl.wu + '</b>' + (wR === 1 ? '👑' : '<span class="dim">#' + wR + '</span>') + '｜智力 <b>' + sl.zhi + '</b>' + (zR === 1 ? '👑<span class="dim">（智力最高）</span>' : '<span class="dim">#' + zR + '</span>') + '｜統率 <b>' + (sl.tong || 0) + '</b></div>' +
       (sl.allocNote ? '<div class="dim">⚠ ' + sl.allocNote + '</div>' : '') +
-      (sl.alloc === '自訂' ? '<div class="dim">自訂配點 武力+' + sl.ptsW + '｜智力+' + sl.ptsZ + '（上限' + (sl.av.pts || 0) + '點）</div>' : '') +
+      (sl.alloc === '自訂' ? '<div class="dim">自訂配點 武力+' + sl.ptsW + '｜智力+' + sl.ptsZ + '｜統率+' + sl.ptsT + '（上限' + (sl.av.pts || 0) + '點）</div>' : '') +
       (advTxt ? '<div class="advline">' + advTxt + '</div>' : '') +
       (sl.defP ? '<div>星石防禦合計 <b>' + Math.round(sl.defP * 1000) / 10 + '%</b>（不計入傷害）</div>' : '') +
       '<div>單發快照 <b>' + sl._snap + '</b>｜普攻 <b>' + sl.na + '</b>/擊</div>';
