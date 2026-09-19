@@ -9,7 +9,7 @@ const DEFS = ['弓兵防禦', '盾兵防禦', '騎兵防禦', '無'];
 const TRAITS = ['無', '天府', '武曲', '紫微', '廉貞', '巨門', '貪狼', '祿存', '天相', '破軍', '七殺', '天馬', '三台', '左輔', '文昌', '右弼', '天刑', '天鉞'];
 const ADVS = ['0', '1', '2', '3', '4', '5'];
 const WPNLVS = ['0', '1', '2', '3', '4', '5'];
-const ALLOCS = ['自動', '武力', '智力', '統率', '自訂'];
+const ALLOCS = ['自動', '武力', '智力', '統率'];   // v5.1.7：自訂改由「配點」填空觸發（任一非空即自訂），不再佔下拉選項
 // 武將清單以係數表（資料庫）為準：有資料的才能選；頭像只影響顯示不影響可選名單（init 時建立）
 let GENERAL_LIST = [];
 
@@ -166,14 +166,12 @@ function renderTeam() {
     rAdv.appendChild(sel(ALLOCS, s.alloc || '自動', (e) => { s.alloc = e.target.value; refresh(); }));
     card.appendChild(rAdv);
 
-    // v5.1.6：自訂加點（武/智點數自由分配，合計上限=進階屬性點）
-    if ((s.alloc || '自動') === '自訂') {
-      const rC = el('div', 'row triple');
-      rC.appendChild(el('label', '', '點數'));
-      rC.appendChild(numInput(s.ptsW, (e) => { s.ptsW = e.target.value; refresh(); }, '武力'));
-      rC.appendChild(numInput(s.ptsZ, (e) => { s.ptsZ = e.target.value; refresh(); }, '智力'));
-      card.appendChild(rC);
-    }
+    // v5.1.7：配點填空（常駐）——武力/智力點數任一非空即自訂分配（覆蓋下拉），留白依下拉的加點方式
+    const rPts = el('div', 'row triple');
+    rPts.appendChild(el('label', '', '配點'));
+    rPts.appendChild(numInput(s.ptsW, (e) => { s.ptsW = e.target.value; refresh(); }, '武力點'));
+    rPts.appendChild(numInput(s.ptsZ, (e) => { s.ptsZ = e.target.value; refresh(); }, '智力點'));
+    card.appendChild(rPts);
 
     // v5.1：兵書星級 / 專武進階（白板制度：book=Y 即持有 0星兵書+0階專武；升專武≥1階需武將滿星+兵書滿星）
     const rBk = el('div', 'row triple');
@@ -263,6 +261,7 @@ function updateCardStats(slots) {
       (sl.gateNote ? '<div class="dim">⚠ ' + sl.gateNote + '</div>' : '') +
       '<div>發揮 武力 <b>' + sl.wu + '</b>' + (wR === 1 ? '👑' : '<span class="dim">#' + wR + '</span>') + '｜智力 <b>' + sl.zhi + '</b>' + (zR === 1 ? '👑<span class="dim">（智力最高）</span>' : '<span class="dim">#' + zR + '</span>') + '</div>' +
       (sl.allocNote ? '<div class="dim">⚠ ' + sl.allocNote + '</div>' : '') +
+      (sl.alloc === '自訂' ? '<div class="dim">自訂配點 武力+' + sl.ptsW + '｜智力+' + sl.ptsZ + '（上限' + (sl.av.pts || 0) + '點）</div>' : '') +
       (advTxt ? '<div class="advline">' + advTxt + '</div>' : '') +
       (sl.defP ? '<div>星石防禦合計 <b>' + Math.round(sl.defP * 1000) / 10 + '%</b>（不計入傷害）</div>' : '') +
       '<div>單發快照 <b>' + sl._snap + '</b>｜普攻 <b>' + sl.na + '</b>/擊</div>';

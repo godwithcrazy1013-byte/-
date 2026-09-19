@@ -256,3 +256,18 @@ console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
   ok = ok && (g1 && g2 && g3 && g4 && g5);
   console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
 })();
+// ---------- v5.1.7 配點填空常駐化 ----------
+(function () {
+  // 1) 填空優先於下拉：alloc=武力 但 智力點=20 → 自訂(智260/武54)
+  const s1 = slot('黃月英', '弓兵'); s1.adv = 5; s1.alloc = '武力'; s1.ptsZ = 20;
+  const r1 = MODEL.compute([slot('司馬懿', '弓兵'), slot('龐統', '弓兵'), s1], 250, 1);
+  const g1 = r1.slots[2].alloc === '自訂' && r1.slots[2].zhi === 260 && r1.slots[2].wu === 54;
+  console.log(g1 ? 'PASS' : 'FAIL', 'v5.1.7填空優先下拉 alloc=' + r1.slots[2].alloc + ' 智' + r1.slots[2].zhi + '/武' + r1.slots[2].wu);
+  // 2) 舊檔 alloc=自訂 但留白 → 退回自動(主屬性全配)
+  const s2 = slot('黃月英', '弓兵'); s2.adv = 5; s2.alloc = '自訂';
+  const r2 = MODEL.compute([slot('司馬懿', '弓兵'), slot('龐統', '弓兵'), s2], 250, 1);
+  const g2 = r2.slots[2].alloc === '智力' && r2.slots[2].zhi === 290 && r2.slots[2].wu === 54;
+  console.log(g2 ? 'PASS' : 'FAIL', 'v5.1.7自訂留白退自動 alloc=' + r2.slots[2].alloc + ' 智' + r2.slots[2].zhi);
+  ok = ok && (g1 && g2);
+  console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
+})();

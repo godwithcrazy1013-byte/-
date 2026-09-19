@@ -426,18 +426,21 @@
       const av = getAdv(s.name, s.adv);
       const mul = affMul(a[s.troop]);
       const add = (st) => (s.s1.attr === st ? num(s.s1.val) : 0) + (s.s2.attr === st ? num(s.s2.val) : 0);
-      // 加點屬性：自動=主屬性（裸智力≥裸武力→智力）；自訂=玩家自行分配武/智點數（v5.1.6，用戶2026-09-19指正加點可自由分配）
+      // 加點屬性：自動=主屬性（裸智力≥裸武力→智力）；配點填空=武/智輸入框任一非空即自訂（v5.1.7 常駐填空，留白依下拉）
       const autoAttr = at.zhi >= at.wu ? '智力' : '武力';
-      const alloc = (!s.alloc || s.alloc === '自動') ? autoAttr : s.alloc;
+      let alloc = (!s.alloc || s.alloc === '自動') ? autoAttr : s.alloc;
       const pts = av.pts;
       let ptsW = 0, ptsZ = 0, allocNote = '';
-      if (alloc === '武力') ptsW = pts;
+      const customW = String(s.ptsW == null ? '' : s.ptsW).trim() !== '' ? num(s.ptsW) : null;
+      const customZ = String(s.ptsZ == null ? '' : s.ptsZ).trim() !== '' ? num(s.ptsZ) : null;
+      if (customW !== null || customZ !== null) {          // 填空優先
+        alloc = '自訂';
+        ptsZ = Math.min(Math.max(0, customZ || 0), pts);
+        ptsW = Math.min(Math.max(0, customW || 0), pts - ptsZ);
+      } else if (alloc === '武力') ptsW = pts;
       else if (alloc === '智力') ptsZ = pts;
       else if (alloc === '統率') allocNote = '統率不加武/智（模型未計統率），此將屬性點閒置';
-      else if (alloc === '自訂') {
-        ptsZ = Math.min(Math.max(0, num(s.ptsZ)), pts);
-        ptsW = Math.min(Math.max(0, num(s.ptsW)), pts - ptsZ);
-      } else ptsZ = pts;
+      else { alloc = autoAttr; if (alloc === '武力') ptsW = pts; else ptsZ = pts; }   // 自動／舊檔自訂留白→自動
       const spdSmEff = av.spdSm * spdDiff;            // v4.2：移速差→技能傷害
       const chase = chaseOf(s.name);                  // v4.3：追擊（額外普攻期望）
       // ---------- v5.0：兵書星級 / 專武進階 ----------
