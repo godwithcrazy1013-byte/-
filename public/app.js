@@ -803,7 +803,7 @@ function renderGallery() {
             const line = el('div', 'g-curve-line');
             line.appendChild(el('span', 'g-curve-fx', e.effect));
             line.appendChild(el('span', 'g-curve-val',
-              e.vals.map((v) => Math.round(v * 100) / 100).join(' → ') + (e.unit || '')));
+              e.vals.map((v) => (v === null || v === undefined) ? '?' : Math.round(v * 100) / 100).join(' → ') + (e.unit || '')));
             det.appendChild(line);
           });
         });
