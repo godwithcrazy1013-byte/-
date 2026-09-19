@@ -8,7 +8,7 @@
 //       ②門檻規則（用戶2026-09-18確認）：有兵書(book=Y)才解鎖專武0階；wpnLv≥2 需 adv≥5(武將滿星)且 bookLv≥5(兵書滿星)，
 //         否則 clamp 到 1 並記 gateNotes；book=N → wpnEff=0、專武反擊/專武防禦全關（修正舊版「無兵書仍有專武反擊」）
 //       ③專武曲線（CURVES.wpn）：DB箭頭經截圖證實為「0階→1階」(荀攸/荀彧/程昱/糜竺)，v(lv)=v0+lv×step，lv=1 即舊模型值
-//         已接：張飛丈八蛇矛(防禦wstep9.3)、張角黃天御雷幡(18)、諸葛亮神機扇(16.3)、黃月英玄機書卷(2)、
+//         已接：張飛丈八蛇矛(防禦wstep9.3)、張角黃天御雷幡(防禦18/護盾乘算48+22×階)、諸葛亮神機扇(16.3)、黃月英玄機書卷(2)、
 //               反擊係數 張角/甘寧/曹丕/樂進
 //       ④兵書曲線（CURVES.book）：只接「新增量」效果（bookLv=0 時貢獻=0，不改舊輸出）：
 //         樂進移速差技傷(0.08+0.02×lv %/點)、張星彩移速差普攻(0.36+0.18×lv %/點)、徐晃全體技傷(7+2×lv %)
@@ -35,7 +35,9 @@
 //       公式來源：B站 BV1383Jz9E2b 陸服戰報 R2~R10 五筆反推（±2%）：
 //         損兵 = 原始傷害 ÷ (1+目標部曲防禦%) ÷ TROOP_HP(39.8)；防禦%為除法遞減、增益滾動疊加到期消退
 //       「受武力/智力/統率影響」放大係數 ATTR_MUL=1.81（張角黃天當立 文案200%→實測362%）
-//       護盾（張角斗轉參橫）先吸收傷害再扣兵；實測護盾10974=400×智力/10（≈274智，不乘1.81）
+//       護盾（張角斗轉參橫）先吸收傷害再扣兵；實測護盾10974=400×智力/10（≈274智，不乘1.81；該場無專武）
+// v5.1.5：張角專武護盾「係數提升48%▶70%」經用戶截圖確認為乘算（0階400×1.48=592，滿階×2.58）；
+//         舊模型 bookCoef=470 係誤讀 flat+70，已改 CURVES.wpn.張角.shieldPct(48+22×階) 乘算接入
 //       注意：本模型既有傷害數值由台服戰報「損兵數」校準，39.8 在「模型傷害↔損兵」間自相抵消，
 //             故整合僅加 (1+D) 除法層與護盾層，不再把所有數字÷39.8
 //       已知簡化：張飛不屈層數=每 tick 1 層（實為敵方3將普攻，5秒窗口至多2層）、
@@ -89,7 +91,7 @@
   const CURVES = {
     wpn: {
       '張飛': { defPct: { v0: 20, step: 9.3 } },              // 丈八蛇矛：每命中部曲+防禦%（0階20/1階29.3）
-      '張角': { defPct: { v0: 39, step: 18 }, counterCoef: { v0: 1.8, step: 0.8 } }, // 黃天御雷幡
+      '張角': { defPct: { v0: 39, step: 18 }, counterCoef: { v0: 1.8, step: 0.8 }, shieldPct: { v0: 48, step: 22 } }, // 黃天御雷幡：反擊文案註明「每秒最多觸發15次」；護盾為乘算提升%(2026-09-19用戶截圖確認，舊誤讀flat+70→470已更正)
       '諸葛亮': { defPct: { v0: 35.7, step: 16.3 } },          // 神機扇：每點智力差0.24→0.35%×敵智差148近似
       '黃月英': { defPct: { v0: 5, step: 2 } },                // 玄機書卷
       '甘寧': { counterCoef: { v0: 0.3, step: 0.1 } },         // 狂瀾鑌鐵刀
@@ -199,7 +201,7 @@
       { kind: 'def', skill: '黃天當立', pct: 200, attr: 'zhi', dur: 6, trigger: 'cast' },   // 施放時+200%(受智力影響)持續6秒
       { kind: 'def', skill: '如日方升', pct: 40, attr: 'zhi', dur: 99, trigger: 'constant' }, // 原為護盾消失後生效，v1常駐化（簡化）
       { kind: 'def', skill: '黃天御雷幡', pct: 57, wstep: 18, attr: 'zhi', dur: 3, trigger: 'na', maxStack: 1, book: true }, // 專武裝備：受普攻時+57%(1階,0階39,wstep18)持續3秒
-      { kind: 'shield', skill: '斗轉參橫', coef: 400, bookCoef: 470, dur: 9, cd: 9, attr: 'zhi' }, // 常駐護盾（9s/冷卻9s）；專武係數400→470
+      { kind: 'shield', skill: '斗轉參橫', coef: 400, dur: 9, cd: 9, attr: 'zhi' }, // 常駐護盾（9s/冷卻9s）；專武乘算+48%/階步進22（CURVES.wpn.張角.shieldPct，book=Y→0階×1.48=592）
     ],
     '關羽': [
       { kind: 'def', skill: '率馬以驥', pct: 108, attr: 'wu', dur: 5, trigger: 'cast' },    // 主動命中後+108%持續5秒（v1視同命中1部曲、跟主動節奏）
@@ -385,13 +387,16 @@
 
   // v4.4 護盾時間軸：值=coef×該將zhi/10÷TROOP_HP（損兵單位；實測 400×274/10=10974 不乘1.81）
   // dur 9 / cd 9 → 常駐護盾：t%(dur+cd)<dur 時在場（進入戰鬥即獲得）
+  // v5.1.5 專武護盾改乘算：coef×(1+shieldPct%)，shieldPct 走 CURVES.wpn 並依 wpnEff 階數（該場實測無專武→400）
   function shieldTimeline(slots) {
     const ents = [];
     slots.forEach((s) => {
       (DEFSYS[s.name] || []).forEach((e) => {
         if (e.kind !== 'shield') return;
         if (e.book && s.book !== 'Y') return;
-        const coef = (e.bookCoef && s.book === 'Y') ? e.bookCoef : e.coef;
+        let coef = e.coef;
+        const wSh = CURVES.wpn[s.name] && CURVES.wpn[s.name].shieldPct;
+        if (s.book === 'Y' && wSh) coef = e.coef * (1 + (wSh.v0 + wSh.step * (s.wpnEff | 0)) / 100);
         ents.push({ val: coef * s.zhi / 10 / TROOP_HP, dur: e.dur, cd: e.cd });
       });
     });
