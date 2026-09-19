@@ -226,7 +226,7 @@
     ],
     '關銀屏': [
       { kind: 'def', skill: '將門虎女', pct: 30, attr: 'wu', dur: 99, trigger: 'constant' },
-      { kind: 'def', skill: '遲玉嬌姿', pct: 4.8, attr: 'wu', dur: 3, trigger: 'na', maxStack: 1, rate: 0.35 }, // 普攻後35%機率+4.8%，期望値近似
+      { kind: 'def', skill: '涎玉嬌姿', pct: 4.8, attr: 'wu', dur: 3, trigger: 'na', maxStack: 1, rate: 0.35 }, // 普攻後35%機率+4.8%，期望値近似
     ],
     '呂布': [
       { kind: 'def', skill: '氣冠三軍', pct: 125, attr: 'wu', dur: 99, trigger: 'constant' },
