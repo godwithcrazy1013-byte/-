@@ -62,6 +62,10 @@
   const MAX_TROOPS = 24000;             // 雙方兵力（8000×3）
   const TROOP_HP = 39.8;                // v4.4 每兵HP（陸服戰報反推；僅用於護盾換算，損兵管線因校準口徑抵消）
   const ATTR_MUL = 1.81;                // v4.4 「受武力/智力/統率影響」放大係數（文案200%→實測362%）
+  const HEAL_REF = 240;                 // v5.1.9 治療基準統率：治療=係數×發揮統率/240（240=滿級裸統率基準）
+                                      // 錨點2026-09-20：30級劉備(裸180+配29)×1.2=250.8，7級德厚流光實測110.5/次
+                                      // （Lv10基準150×250.8/240=157.2→×0.7技能等級線性=110.1）；同場傷害264.4 vs 實測264 交叉驗證
+                                      // 單一錨點±2%不確定性；技能等級線性縮放(Lv7≈0.7×Lv10)未入模，模型假設滿級Lv10
 
   // v4.7 「受武力/智力影響」機率校準表（破賊戰報 2026-09-17：趙雲16/43=37%、馬超5/32=16%、關銀屏≈19%）
   // 公式反推失敗：三將擬合 k 值差五倍，判定每技能獨立係數、無通用公式 → 有實測處用實測值覆寫；
@@ -441,7 +445,7 @@
         ptsT = Math.min(Math.max(0, customT || 0), pts - ptsZ - ptsW);
       } else if (alloc === '武力') ptsW = pts;
       else if (alloc === '智力') ptsZ = pts;
-      else if (alloc === '統率') { ptsT = pts; allocNote = '統率型武將（劉備/曹操等）建議用配點微調；模型公式暫未計統率加成（技能為校準定值）'; }
+      else if (alloc === '統率') { ptsT = pts; allocNote = '統率型武將（劉備/曹操等）建議用配點微調；治療技能（德厚流光）受發揮統率影響（v5.1.9）'; }
       else { alloc = autoAttr; if (alloc === '武力') ptsW = pts; else ptsZ = pts; }   // 自動／舊檔自訂留白→自動
       const spdSmEff = av.spdSm * spdDiff;            // v4.2：移速差→技能傷害
       const chase = chaseOf(s.name);                  // v4.3：追擊（額外普攻期望）
@@ -466,7 +470,7 @@
         chase, chaseMult: chase ? chase.mult : 1, counter,
         wu: round1(at.wu * mul + add('武力') + ptsW),
         zhi: round1(at.zhi * mul + add('智力') + ptsZ),
-        tong: round1((at.tong || 0) * mul + ptsT),   // v5.1.8：統率（展示/配點歸屬；公式未計統率加成）
+        tong: round1((at.tong + ptsT) * mul),   // v5.1.9：遊戲實測訂單=(裸+配點)×兵種係數（治療錨點反推，與武/智訂單不同）
         defP: num(s.s1.defP) + num(s.s2.defP),
         // 滿兵每擊普攻（v5模型；兵力衰減由 battle() 依剩餘兵力動態乘）
         // v4.7：paWin=「主動後普攻增傷窗口」常駐近似（威震三軍+275%/9秒、冷卻9秒→覆蓋率≈100%）
@@ -551,7 +555,8 @@
       let vm = 1;
       for (let s = 0; s < 3; s++) vm *= (1 + (slots[s].c.vjp + slots[s].av.vp) * slots[s].c.vk * gV(s));
       const d = dmg(slots[m], m, t, { buff, vuln: vm, facB, targetCorr, enemyInt, tgtPer, ptCrit });
-      const heal = Math.round(slots[m].c.heal + d * (slots[m].c.ls + slots[m].av.ls)); // v4.2：+進階倒戈ls
+      // v5.1.9：治療受發揮統率影響：係數×發揮統率/HEAL_REF（+進階ls）
+      const heal = Math.round(slots[m].c.heal * (slots[m].tong / HEAL_REF) + d * (slots[m].c.ls + slots[m].av.ls));
       ticks.push({ i: i + 1, t, m, dmg: d, heal });
     }
     return { argW, argZ, facB, grid, recv, vulnAll, snap, ticks };

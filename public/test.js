@@ -287,8 +287,33 @@ console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
   // 3) 劉備 adv5 下拉選統率 → 50點全進統率（338），武智不加
   const s2 = slot('劉備', '盾兵'); s2.adv = 5; s2.alloc = '統率';
   const r2 = MODEL.compute([s2, slot('張飛', '盾兵'), slot('關羽', '盾兵')], 250, 1);
-  const g3 = r2.slots[0].ptsT === 50 && r2.slots[0].tong === 338 && !!r2.slots[0].allocNote;
+  const g3 = r2.slots[0].ptsT === 50 && r2.slots[0].tong === 348 && !!r2.slots[0].allocNote;
   console.log(g3 ? 'PASS' : 'FAIL', 'v5.1.8統率下拉全配 ptsT=' + r2.slots[0].ptsT + ' 統率' + r2.slots[0].tong);
   ok = ok && (g1 && g2 && g3);
+  console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
+})();
+// ---------- v5.1.9 治療受發揮統率影響 ----------
+(function () {
+  // 1) 錨點反推：滿級劉備 adv0 盾兵(S×1.2) 發揮統率=240×1.2=288 → 德厚流光治療=150×288/240=180/次
+  const r1 = MODEL.compute([slot('劉備', '盾兵'), slot('張飛', '盾兵'), slot('關羽', '盾兵')], 250, 1);
+  const tk1 = r1.ticks.find((t) => t.actor === '劉備');
+  const g1 = r1.slots[0].tong === 288 && tk1.heal === 180;
+  console.log(g1 ? 'PASS' : 'FAIL', 'v5.1.9治療統率縮放 發揮統率' + r1.slots[0].tong + ' 治療' + tk1.heal + '/次(期望180)');
+  // 2) 統率配點提升治療：adv5全配統率 → (240+50)×1.2=348 → round(150×348/240)=218
+  const s2 = slot('劉備', '盾兵'); s2.adv = 5; s2.alloc = '統率';
+  const r2 = MODEL.compute([s2, slot('張飛', '盾兵'), slot('關羽', '盾兵')], 250, 1);
+  const tk2 = r2.ticks.find((t) => t.actor === '劉備');
+  const g2 = r2.slots[0].tong === 348 && tk2.heal === 218;
+  console.log(g2 ? 'PASS' : 'FAIL', 'v5.1.9統率配點增療 發揮統率' + r2.slots[0].tong + ' 治療' + tk2.heal + '/次(期望218)');
+  // 3) 遊戲訂單(裸+配)×係數：自訂統率10點 → 250×1.2=300（舊訂單298）；弓兵B適配0.8 → 192、治療120
+  const s3 = slot('劉備', '盾兵'); s3.adv = 5; s3.ptsT = 10;
+  const r3 = MODEL.compute([s3, slot('張飛', '盾兵'), slot('關羽', '盾兵')], 250, 1);
+  const g3 = r3.slots[0].tong === 300;
+  console.log(g3 ? 'PASS' : 'FAIL', 'v5.1.9(裸+配)×係數訂單 統率10點→' + r3.slots[0].tong + '(期望300)');
+  const r4 = MODEL.compute([slot('劉備', '弓兵'), slot('張飛', '弓兵'), slot('關羽', '弓兵')], 250, 1);
+  const tk4 = r4.ticks.find((t) => t.actor === '劉備');
+  const g4 = r4.slots[0].tong === 192 && tk4.heal === 120;
+  console.log(g4 ? 'PASS' : 'FAIL', 'v5.1.9不適配兵種 弓0.8→統率' + r4.slots[0].tong + ' 治療' + tk4.heal + '/次(期望120)');
+  ok = ok && (g1 && g2 && g3 && g4);
   console.log(ok ? 'ALL PASS' : 'HAS FAILURES');
 })();
